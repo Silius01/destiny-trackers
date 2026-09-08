@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Armor Vault</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef0f3;
+    --surface:#ffffff;
+    --surface-2:#f5f6f8;
+    --text:#1a1e24;
+    --text-dim:#5c6572;
+    --text-faint:#8790a0;
+    --border:#dbdfe4;
+    --border-strong:#c3c9d1;
+    --accent:#a8701c;
+    --accent-ink:#ffffff;
+    --accent-soft:#f4e6cf;
+    --shadow:0 1px 2px rgba(20,24,30,.06);
+
+    --stat-weapons:#c0392b;
+    --stat-health:#2e7d32;
+    --stat-class:#2f6fb0;
+    --stat-grenade:#7a4bc9;
+    --stat-super:#b8860b;
+    --stat-melee:#c0662b;
+
+    --radius-sm:6px;
+    --radius-md:10px;
+  }
+
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#12151a;
+      --surface:#1a1e25;
+      --surface-2:#20252d;
+      --text:#e9ebef;
+      --text-dim:#9aa3b1;
+      --text-faint:#6b7382;
+      --border:#2a2f38;
+      --border-strong:#3a4049;
+      --accent:#e3a13d;
+      --accent-ink:#1a1305;
+      --accent-soft:#3a2e15;
+      --shadow:0 1px 2px rgba(0,0,0,.4);
+
+      --stat-weapons:#e5584a;
+      --stat-health:#4fae54;
+      --stat-class:#5b9be0;
+      --stat-grenade:#a480e8;
+      --stat-super:#dcb646;
+      --stat-melee:#e08a4c;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#12151a;
+    --surface:#1a1e25;
+    --surface-2:#20252d;
+    --text:#e9ebef;
+    --text-dim:#9aa3b1;
+    --text-faint:#6b7382;
+    --border:#2a2f38;
+    --border-strong:#3a4049;
+    --accent:#e3a13d;
+    --accent-ink:#1a1305;
+    --accent-soft:#3a2e15;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+
+    --stat-weapons:#e5584a;
+    --stat-health:#4fae54;
+    --stat-class:#5b9be0;
+    --stat-grenade:#a480e8;
+    --stat-super:#dcb646;
+    --stat-melee:#e08a4c;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:"Work Sans",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--accent-soft);}
+
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+  }
+
+  header.top{
+    position:sticky;
+    top:0;
+    z-index:20;
+    background:var(--bg);
+    border-bottom:1px solid var(--border);
+    padding:16px 18px 12px;
+  }
+  .top-inner{
+    max-width:760px;
+    margin:0 auto;
+  }
+  .title-row{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  h1{
+    font-family:"Big Shoulders","Work Sans",sans-serif;
+    font-weight:800;
+    font-size:30px;
+    letter-spacing:.01em;
+    margin:2px 0 0;
+    text-wrap:balance;
+  }
+  .sync-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    color:var(--text-dim);
+    padding:4px 9px;
+    border:1px solid var(--border);
+    border-radius:999px;
+    background:var(--surface);
+    white-space:nowrap;
+  }
+  .sync-dot{
+    width:6px;height:6px;border-radius:50%;
+    background:var(--text-faint);
+    flex:none;
+  }
+  .sync-pill[data-state="synced"] .sync-dot{background:var(--stat-health);}
+  .sync-pill[data-state="syncing"] .sync-dot{background:var(--accent); animation:pulse 1s ease-in-out infinite;}
+  .sync-pill[data-state="local"] .sync-dot{background:var(--text-faint);}
+  .sync-pill[data-state="error"] .sync-dot{background:var(--stat-weapons);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+
+  .progress-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-top:12px;
+  }
+  .progress-track{
+    flex:1;
+    height:7px;
+    border-radius:4px;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;
+    background:var(--accent);
+    width:0%;
+    transition:width .25s ease;
+  }
+  .progress-label{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:13px;
+    font-variant-numeric:tabular-nums;
+    color:var(--text-dim);
+    white-space:nowrap;
+  }
+  .progress-label b{color:var(--text); font-weight:600;}
+
+  .set-head-text{
+    display:flex;
+    flex-direction:column;
+    gap:1px;
+    min-width:0;
+  }
+  .set-source{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:10.5px;
+    font-weight:400;
+    text-transform:none;
+    letter-spacing:normal;
+    color:var(--text-faint);
+  }
+  .slot-group{
+    border-top:1px solid var(--border);
+  }
+  .slot-group:first-child{
+    border-top:none;
+  }
+  .slot-head{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    padding:9px 12px;
+    background:var(--surface-2);
+    cursor:pointer;
+    user-select:none;
+  }
+  .slot-head:hover{background:color-mix(in srgb, var(--accent-soft) 40%, var(--surface-2));}
+  .slot-head .slot-icon{
+    width:24px;height:24px;
+  }
+  .slot-head .slot-icon svg{
+    width:13px;height:13px;
+  }
+  .slot-head-title{
+    font-family:"Big Shoulders",sans-serif;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:.03em;
+    text-transform:uppercase;
+    color:var(--text);
+  }
+  .slot-head-count{
+    margin-left:auto;
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    color:var(--text-faint);
+    font-variant-numeric:tabular-nums;
+  }
+  .slot-chevron{
+    color:var(--text-faint);
+    transition:transform .15s ease;
+    flex:none;
+  }
+  .slot-group.collapsed .slot-chevron{transform:rotate(-90deg);}
+  .slot-group.collapsed .slot-rows{display:none;}
+
+  .slot-jump-bar{
+    position:fixed;
+    left:50%;
+    transform:translateX(-50%);
+    top:var(--header-h, 56px);
+    z-index:18;
+    width:100%;
+    max-width:724px;
+    box-sizing:border-box;
+    display:flex;
+    gap:6px;
+    padding:7px 18px;
+    background:var(--bg);
+    border-bottom:1px solid var(--border);
+    box-shadow:var(--shadow);
+    overflow-x:auto;
+  }
+  .slot-jump-bar[hidden]{display:none;}
+  .slot-jump-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:5px;
+    flex:none;
+    width:32px;height:32px;
+    padding:0;
+    border-radius:7px;
+    border:1px solid var(--border-strong);
+    background:var(--surface);
+    color:var(--text-dim);
+    cursor:pointer;
+  }
+  .slot-jump-btn:hover{border-color:var(--accent); color:var(--accent);}
+  .slot-jump-btn.active{border-color:var(--accent); background:var(--accent-soft); color:var(--accent);}
+  .slot-jump-btn svg{width:15px;height:15px;}
+
+  .header-slim{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    width:100%;
+    padding:2px 2px;
+    background:none;
+    border:none;
+    cursor:pointer;
+    text-align:left;
+  }
+  .header-slim-dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--text-faint);
+    flex:none;
+  }
+  .header-slim-dot.synced{background:var(--stat-health);}
+  .header-slim-dot.syncing{background:var(--accent); animation:pulse 1s ease-in-out infinite;}
+  .header-slim-dot.error{background:var(--stat-weapons);}
+  .header-slim-title{
+    font-family:"Big Shoulders","Work Sans",sans-serif;
+    font-weight:800;
+    font-size:19px;
+    letter-spacing:.01em;
+    color:var(--text);
+  }
+  .header-slim-progress{
+    margin-left:auto;
+    font-family:"IBM Plex Mono",monospace;
+    font-size:12px;
+    font-variant-numeric:tabular-nums;
+    color:var(--text-faint);
+  }
+  .header-slim-progress b{color:var(--text-dim); font-weight:600;}
+  .header-slim-chevron{
+    color:var(--text-faint);
+    transition:transform .15s ease;
+    flex:none;
+  }
+  .header-slim.collapsed .header-slim-chevron{transform:rotate(-90deg);}
+  .header-full{
+    margin-top:8px;
+  }
+  .header-full.collapsed{display:none;}
+  .controls{
+    margin-top:12px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .search-wrap{
+    position:relative;
+  }
+  .search-wrap input{
+    width:100%;
+    padding:9px 12px 9px 32px;
+    border-radius:var(--radius-sm);
+    border:1px solid var(--border-strong);
+    background:var(--surface);
+    color:var(--text);
+    font-family:"Work Sans",sans-serif;
+    font-size:14px;
+  }
+  .search-wrap input:focus{
+    outline:2px solid var(--accent);
+    outline-offset:-1px;
+  }
+  .search-wrap svg{
+    position:absolute;
+    left:10px;
+    top:50%;
+    transform:translateY(-50%);
+    width:14px;height:14px;
+    color:var(--text-faint);
+  }
+  .chip-scroller{
+    display:flex;
+    gap:6px;
+    overflow-x:auto;
+    padding-bottom:2px;
+  }
+  .chip-scroller::-webkit-scrollbar{height:4px;}
+  .chip-sep{
+    width:1px;
+    background:var(--border);
+    margin:2px 2px;
+    flex:none;
+  }
+  button.chip{
+    flex:none;
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11.5px;
+    letter-spacing:.03em;
+    padding:5px 10px;
+    border-radius:999px;
+    border:1px solid var(--border-strong);
+    background:var(--surface);
+    color:var(--text-dim);
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  button.chip:hover{border-color:var(--accent);}
+  button.chip.active{
+    background:var(--text);
+    border-color:var(--text);
+    color:var(--bg);
+  }
+  button.chip:focus-visible, a:focus-visible, input:focus-visible, .row:focus-visible{
+    outline:2px solid var(--accent);
+    outline-offset:1px;
+  }
+
+  main{
+    max-width:760px;
+    margin:0 auto;
+    padding:14px 18px 60px;
+  }
+
+  .section{
+    margin-top:18px;
+  }
+  .section-head{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    cursor:pointer;
+    padding:6px 2px;
+    user-select:none;
+  }
+  .slot-icon{
+    width:26px;height:26px;
+    border-radius:7px;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex:none;
+    color:var(--text-dim);
+  }
+  .slot-icon svg{width:14px;height:14px;}
+  .section-title{
+    font-family:"Big Shoulders",sans-serif;
+    font-weight:700;
+    font-size:16px;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    color:var(--text);
+  }
+  .section-count{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:12px;
+    color:var(--text-faint);
+    font-variant-numeric:tabular-nums;
+  }
+  .section-chevron{
+    margin-left:auto;
+    color:var(--text-faint);
+    transition:transform .15s ease;
+    flex:none;
+  }
+  .section.collapsed .section-chevron{transform:rotate(-90deg);}
+  .section-body{
+    border:1px solid var(--border);
+    border-radius:var(--radius-md);
+    background:var(--surface);
+    overflow:hidden;
+    box-shadow:var(--shadow);
+  }
+  .section.collapsed .section-body{display:none;}
+  .row{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    padding:10px 12px;
+    border-bottom:1px solid var(--border);
+    cursor:pointer;
+  }
+  .row:last-child{border-bottom:none;}
+  .row:hover{background:var(--surface-2);}
+  .row.owned{background:var(--accent-soft);}
+  .row.owned:hover{background:var(--accent-soft);}
+  .row[hidden]{display:none;}
+
+  .row-check{
+    flex:none;
+    margin-top:2px;
+    width:19px;height:19px;
+    cursor:pointer;
+    accent-color:var(--accent);
+  }
+  .row-main{
+    flex:1;
+    min-width:0;
+  }
+  .row-name-line{
+    display:flex;
+    align-items:baseline;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .row-name{
+    font-weight:600;
+    font-size:14.5px;
+    color:var(--text);
+  }
+  .row.edited .row-name{color:var(--accent);}
+  .row-meta{
+    font-size:12.5px;
+    color:var(--text-dim);
+    margin-top:3px;
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+  .stat-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:1px 7px 1px 5px;
+    border-radius:999px;
+    font-size:11.5px;
+    font-weight:500;
+    color:#fff;
+  }
+  .stat-pill .dot{
+    width:6px;height:6px;border-radius:50%;
+    background:#fff;
+    opacity:.85;
+  }
+  .row-meta .sep{color:var(--text-faint); font-size:11px;}
+  .tertiary-tag{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:10.5px;
+    color:var(--text-faint);
+  }
+
+  .row-detail{
+    margin-top:9px;
+    display:none;
+  }
+  .row.expanded .row-detail{display:block;}
+
+  .roll-block{
+    padding:10px 11px;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+  }
+  .roll-title{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:10.5px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    margin-bottom:8px;
+    display:block;
+  }
+  .fixed-stats-row{
+    display:flex;
+    gap:16px;
+    margin-bottom:10px;
+  }
+  .fixed-stat{
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+  }
+  .fixed-stat .roll-col-label{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:10px;
+    color:var(--text-faint);
+    letter-spacing:.06em;
+  }
+  .tertiary-picker{
+    border-top:1px dashed var(--border);
+    padding-top:9px;
+  }
+  .tertiary-options{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    margin-top:6px;
+  }
+  button.tert-btn{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    padding:5px 10px;
+    border-radius:6px;
+    border:1px solid var(--border-strong);
+    background:var(--surface);
+    color:var(--text-dim);
+    cursor:pointer;
+  }
+  button.tert-btn:hover{border-color:var(--accent);}
+  button.tert-btn.active{
+    border-color:var(--accent);
+    background:var(--accent-soft);
+    color:var(--accent);
+    font-weight:600;
+  }
+  .tier-note{
+    margin-top:9px;
+    font-size:11.5px;
+    color:var(--text-faint);
+    line-height:1.5;
+  }
+
+  .empty-state{
+    text-align:center;
+    color:var(--text-faint);
+    font-size:13.5px;
+    padding:40px 12px;
+  }
+
+  footer.foot{
+    max-width:760px;
+    margin:0 auto;
+    padding:0 18px 40px;
+    color:var(--text-faint);
+    font-size:12px;
+    font-family:"IBM Plex Mono",monospace;
+  }
+
+  @media (max-width:480px){
+    h1{font-size:25px;}
+    header.top{padding:13px 14px 10px;}
+    main{padding:12px 14px 50px;}
+  }
+</style>
+
+<header class="top">
+  <div class="top-inner">
+    <button type="button" class="header-slim" id="headerToggle">
+      <span class="header-slim-dot" id="syncDotMini"></span>
+      <span class="header-slim-title">Armor Vault</span>
+      <span class="header-slim-progress"><b id="ownedCountMini">0</b>/<span id="totalCountMini">0</span></span>
+      <svg class="header-slim-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+
+    <div class="header-full" id="headerFull">
+      <div class="title-row">
+        <div>
+          <div class="eyebrow">Destiny 2 &middot; Armor 3.0 Tracker &middot; by Set</div>
+          <h1>Armor Vault</h1>
+        </div>
+        <div class="sync-pill" id="syncPill" data-state="local">
+          <span class="sync-dot"></span>
+          <span id="syncLabel">Loading&hellip;</span>
+        </div>
+      </div>
+
+      <div class="progress-row">
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-label"><b id="ownedCount">0</b> / <span id="totalCount">0</span> farmed</div>
+      </div>
+
+      <div class="controls" id="controlsPanel">
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input type="text" id="searchInput" placeholder="Search by set, archetype, or stat&hellip;" autocomplete="off">
+        </div>
+
+        <div class="chip-scroller" id="statusChips">
+          <button class="chip active" data-status="all">All</button>
+          <button class="chip" data-status="owned">Farmed</button>
+          <button class="chip" data-status="unowned">Missing</button>
+          <span class="chip-sep"></span>
+          <button class="chip" id="expandAllBtn" data-action="expand">Expand all</button>
+          <button class="chip" id="collapseAllBtn" data-action="collapse">Collapse all</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="slot-jump-bar" id="slotJumpBar" hidden></div>
+
+<main id="main">
+  <div id="sections"></div>
+  <div class="empty-state" id="emptyState" hidden>No archetypes match your filters.</div>
+</main>
+
+<footer class="foot">Armor 3.0: each piece rolls one archetype (fixed primary + secondary stat) plus a tertiary stat drawn from the other four &middot; <span id="footSets">0</span> sets, <span id="footTotal">0</span> combinations, <span id="footExotics">0</span> exotics tracked.</footer>
+
+<script>
+const SLOTS = ['Helmet','Gauntlets','Chest Armor','Leg Armor','Class Item'];
+const SETS = [{"name":"Aion Adapter","source":"Exploring Kepler"},{"name":"Aion Renewal","source":"Exploring Kepler"},{"name":"Apostate's Blade","source":"Pit of Heresy Dungeon"},{"name":"Atheon's Memory","source":"Vault of Glass Raid"},{"name":"Bushido","source":"Pinnacle Activities"},{"name":"Circuit","source":"Sparrow Racing League"},{"name":"Coda","source":"Prophecy Dungeon"},{"name":"Collective Psyche","source":"The Desert Perpetual"},{"name":"Crota's Memory","source":"Crota's End Raid"},{"name":"Cruel Electrum","source":"Trials of Osiris Challenges"},{"name":"Crystocrene","source":"Europa"},{"name":"Cyberserpent Null","source":"Gambit"},{"name":"Dark Age","source":"Warlord's Ruin Dungeon"},{"name":"Deep Explorer","source":"Dungeon Duality"},{"name":"Disaster Corps","source":"Portal Activities"},{"name":"Dreambane","source":"Moon"},{"name":"Eutechnology","source":"Pinnacle Activities"},{"name":"Exodus Down","source":"Nessus"},{"name":"Ferropotent","source":"Ferropotent Suit"},{"name":"First Ascent","source":"Pale Heart"},{"name":"Flain","source":"Sundered Doctrine"},{"name":"Great Hunt","source":"Last Wish Raid"},{"name":"Iron Battalion","source":"Iron Banner"},{"name":"Iron Panoply","source":"Iron Banner"},{"name":"Kentarch 3","source":"Garden of Salvation Raid"},{"name":"Last Discipline","source":"Portal Activities"},{"name":"Legacy's Oath","source":"Deep Stone Crypt Raid"},{"name":"Luminopotent","source":"Portal Activities"},{"name":"Lustrous","source":"Solstice"},{"name":"New Demotic","source":"Trials of Osiris Challenges"},{"name":"Nezarec's Nightmare","source":"Root of Nightmares Raid"},{"name":"Oryx's Memory","source":"King's Fall Raid"},{"name":"Pantheos Resplendent","source":"Pantheon"},{"name":"Per Audacia","source":"Glory Matches in Crucible"},{"name":"Promised","source":"Salvation's Edge Raid"},{"name":"Resonant Fury","source":"Vow of the Disciple Raid"},{"name":"Reverie Dawn","source":"Dreaming City"},{"name":"Sage Protector","source":"Equilibrium Dungeon"},{"name":"Seventh Seraph","source":"Cosmodrome"},{"name":"Shrewd Survivor","source":"Lawless Frontier Activities"},{"name":"Smoke Jumper","source":"Portal Activities"},{"name":"Spacewalk","source":"Vesper's Host"},{"name":"Swordmaster","source":"Pinnacle Activities"},{"name":"Taken King","source":"Ghosts of the Deep Dungeon"},{"name":"Techeun's Regalia","source":"Shattered Throne Dungeon"},{"name":"Techsec","source":"Portal Activities"},{"name":"Thriving Survivor","source":"Lawless Frontier Activities"},{"name":"Thunderhead","source":"Neomuna"},{"name":"TM Custom","source":"Spire of the Watcher Dungeon"},{"name":"Triumphal Anthem","source":"Portal Activities"},{"name":"Twofold Crown","source":"Trials of Osiris Challenges"},{"name":"Veritas","source":"Throne World"},{"name":"Wayward Psyche","source":"The Desert Perpetual Epic Raid"},{"name":"Wild Anthem","source":"Wild Anthem Suit"},{"name":"Wildwood","source":"EDZ"},{"name":"Yearning Echo","source":"Grasp of Avarice Dungeon"}];
+const STATS = ['Weapons','Health','Class','Grenade','Super','Melee'];
+const STAT_VAR = {
+  Weapons:'--stat-weapons', Health:'--stat-health', Class:'--stat-class',
+  Grenade:'--stat-grenade', Super:'--stat-super', Melee:'--stat-melee',
+};
+
+const ARCHETYPES = [
+  { name:'Brawler',       primary:'Melee',   secondary:'Health'  },
+  { name:'Bulwark',       primary:'Health',  secondary:'Class'   },
+  { name:'Colossus',      primary:'Super',   secondary:'Health'  },
+  { name:'Demolitionist', primary:'Grenade', secondary:'Class'   },
+  { name:'Grenadier',     primary:'Grenade', secondary:'Super'   },
+  { name:'Gunner',        primary:'Weapons', secondary:'Grenade' },
+  { name:'Paragon',       primary:'Super',   secondary:'Melee'   },
+  { name:'Powerhouse',    primary:'Weapons', secondary:'Super'   },
+  { name:'Reaver',        primary:'Class',   secondary:'Melee'   },
+  { name:'Siegebreaker',  primary:'Health',  secondary:'Grenade' },
+  { name:'Skirmisher',    primary:'Melee',   secondary:'Weapons' },
+  { name:'Specialist',    primary:'Class',   secondary:'Weapons' },
+].map(a => ({
+  ...a,
+  tertiaryOptions: STATS.filter(s => s !== a.primary && s !== a.secondary),
+}));
+
+// Flatten into the full combo list: set x slot x archetype
+const COMBOS = [];
+SETS.forEach(set => {
+  SLOTS.forEach(slot => {
+    ARCHETYPES.forEach(arch => {
+      COMBOS.push({
+        id: [set.name, slot, arch.name].join('/'),
+        setName: set.name, source: set.source, slot,
+        archetype: arch.name,
+        primary: arch.primary,
+        secondary: arch.secondary,
+        tertiaryOptions: arch.tertiaryOptions,
+      });
+    });
+  });
+});
+
+// Every currently obtainable exotic armor piece (Armor 3.0 version), from light.gg.
+const EXOTICS = [{"name":"ACD/0 Feedback Fence","slot":"Gauntlets"},{"name":"Abeyant Leap","slot":"Leg Armor"},{"name":"Actium War Rig","slot":"Chest Armor"},{"name":"Aeon Safe","slot":"Gauntlets"},{"name":"Aeon Soul","slot":"Gauntlets"},{"name":"Aeon Swift","slot":"Gauntlets"},{"name":"An Insurmountable Skullfort","slot":"Helmet"},{"name":"Antaeus Wards","slot":"Leg Armor"},{"name":"Apotheosis Veil","slot":"Helmet"},{"name":"Arbor Warden","slot":"Chest Armor"},{"name":"Armamentarium","slot":"Chest Armor"},{"name":"Ashen Wake","slot":"Gauntlets"},{"name":"Assassin's Cowl","slot":"Helmet"},{"name":"Astrocyte Verse","slot":"Helmet"},{"name":"Athrys's Embrace","slot":"Gauntlets"},{"name":"Balance of Power","slot":"Leg Armor"},{"name":"Ballidorse Wrathweavers","slot":"Gauntlets"},{"name":"Blastwave Striders","slot":"Leg Armor"},{"name":"Blight Ranger","slot":"Helmet"},{"name":"Boots of the Assembler","slot":"Leg Armor"},{"name":"Briarbinds","slot":"Gauntlets"},{"name":"Cadmus Ridge Lancecap","slot":"Helmet"},{"name":"Caliban's Hand","slot":"Gauntlets"},{"name":"Celestial Nighthawk","slot":"Helmet"},{"name":"Cenotaph Mask","slot":"Helmet"},{"name":"Chromatic Fire","slot":"Chest Armor"},{"name":"Citan's Ramparts","slot":"Gauntlets"},{"name":"Claws of Ahamkara","slot":"Gauntlets"},{"name":"Contraverse Hold","slot":"Gauntlets"},{"name":"Crest of Alpha Lupi","slot":"Chest Armor"},{"name":"Crown of Tempests","slot":"Helmet"},{"name":"Cuirass of the Falling Star","slot":"Chest Armor"},{"name":"Cyrtarachne's Facade","slot":"Helmet"},{"name":"Dawn Chorus","slot":"Helmet"},{"name":"Deimosuffusion","slot":"Helmet"},{"name":"Doom Fang Pauldron","slot":"Gauntlets"},{"name":"Dunemarchers","slot":"Leg Armor"},{"name":"Eternal Warrior","slot":"Helmet"},{"name":"Eunoia","slot":"Gauntlets"},{"name":"Eye of Another World","slot":"Helmet"},{"name":"Fallen Sunstar","slot":"Helmet"},{"name":"Felwinter's Helm","slot":"Helmet"},{"name":"Foetracer","slot":"Helmet"},{"name":"Fortune's Favor","slot":"Leg Armor"},{"name":"Fr0st-EE5","slot":"Leg Armor"},{"name":"Gemini Jester","slot":"Leg Armor"},{"name":"Geomag Stabilizers","slot":"Leg Armor"},{"name":"Getaway Artist","slot":"Gauntlets"},{"name":"Gifted Conviction","slot":"Chest Armor"},{"name":"Graviton Forfeit","slot":"Helmet"},{"name":"Gwisin Vest","slot":"Chest Armor"},{"name":"Gyrfalcon's Hauberk","slot":"Chest Armor"},{"name":"Hallowfire Heart","slot":"Chest Armor"},{"name":"Hazardous Propulsion","slot":"Chest Armor"},{"name":"Heart of Inmost Light","slot":"Chest Armor"},{"name":"Helm of Saint-14","slot":"Helmet"},{"name":"Hoarfrost-Z","slot":"Chest Armor"},{"name":"Icefall Mantle","slot":"Gauntlets"},{"name":"Karnstein Armlets","slot":"Gauntlets"},{"name":"Khepri's Horn","slot":"Helmet"},{"name":"Khepri's Sting","slot":"Gauntlets"},{"name":"Knucklehead Radar","slot":"Helmet"},{"name":"Liar's Handshake","slot":"Gauntlets"},{"name":"Lion Rampant","slot":"Leg Armor"},{"name":"Loreley Splendor Helm","slot":"Helmet"},{"name":"Lucky Pants","slot":"Leg Armor"},{"name":"Lucky Raspberry","slot":"Chest Armor"},{"name":"Lunafaction Boots","slot":"Leg Armor"},{"name":"Mantle of Battle Harmony","slot":"Chest Armor"},{"name":"Mask of Bakris","slot":"Helmet"},{"name":"Mask of Fealty","slot":"Helmet"},{"name":"Mask of the Quiet One","slot":"Helmet"},{"name":"Mataiodoxía","slot":"Chest Armor"},{"name":"Mechaneer's Tricksleeves","slot":"Gauntlets"},{"name":"Melas Panoplia","slot":"Gauntlets"},{"name":"Mk. 44 Stand Asides","slot":"Leg Armor"},{"name":"Moirai","slot":"Chest Armor"},{"name":"Mothkeeper's Wraps","slot":"Gauntlets"},{"name":"Necrotic Grip","slot":"Gauntlets"},{"name":"Nezarec's Sin","slot":"Helmet"},{"name":"No Backup Plans","slot":"Gauntlets"},{"name":"Nothing Manacles","slot":"Gauntlets"},{"name":"Oathkeeper","slot":"Gauntlets"},{"name":"Omnioculus","slot":"Chest Armor"},{"name":"One-Eyed Mask","slot":"Helmet"},{"name":"Ophidia Spathe","slot":"Chest Armor"},{"name":"Ophidian Aspect","slot":"Gauntlets"},{"name":"Orpheus Rig","slot":"Leg Armor"},{"name":"Osmiomancy Gloves","slot":"Gauntlets"},{"name":"Peacekeepers","slot":"Leg Armor"},{"name":"Peregrine Greaves","slot":"Leg Armor"},{"name":"Phoenix Cradle","slot":"Leg Armor"},{"name":"Phoenix Protocol","slot":"Chest Armor"},{"name":"Point-Contact Cannon Brace","slot":"Gauntlets"},{"name":"Praxic Vestment","slot":"Chest Armor"},{"name":"Precious Scars","slot":"Helmet"},{"name":"Promethium Spur","slot":"Leg Armor"},{"name":"Pyrogale Gauntlets","slot":"Gauntlets"},{"name":"Radiant Dance Machines","slot":"Leg Armor"},{"name":"Raiden Flux","slot":"Chest Armor"},{"name":"Raiju's Harness","slot":"Chest Armor"},{"name":"Rain of Fire","slot":"Leg Armor"},{"name":"Relativism","slot":"Class Item"},{"name":"Renewal Grasps","slot":"Gauntlets"},{"name":"Rime-coat Raiment","slot":"Chest Armor"},{"name":"Sanguine Alchemy","slot":"Chest Armor"},{"name":"Sealed Ahamkara Grasps","slot":"Gauntlets"},{"name":"Secant Filaments","slot":"Leg Armor"},{"name":"Second Chance","slot":"Gauntlets"},{"name":"Severance Enclosure","slot":"Chest Armor"},{"name":"Shards of Galanor","slot":"Gauntlets"},{"name":"Shinobu's Vow","slot":"Gauntlets"},{"name":"Skull of Dire Ahamkara","slot":"Helmet"},{"name":"Solipsism","slot":"Class Item"},{"name":"Speaker's Sight","slot":"Helmet"},{"name":"Speedloader Slacks","slot":"Leg Armor"},{"name":"St0mp-EE5","slot":"Leg Armor"},{"name":"Star-Eater Scales","slot":"Leg Armor"},{"name":"Starfire Protocol","slot":"Chest Armor"},{"name":"Stoicism","slot":"Class Item"},{"name":"Stormdancer's Brace","slot":"Chest Armor"},{"name":"Stronghold","slot":"Gauntlets"},{"name":"Sunbracers","slot":"Gauntlets"},{"name":"Swarmers","slot":"Leg Armor"},{"name":"Synthoceps","slot":"Gauntlets"},{"name":"The Bombardiers","slot":"Leg Armor"},{"name":"The Dragon's Shadow","slot":"Chest Armor"},{"name":"The Path of Burning Steps","slot":"Leg Armor"},{"name":"The Sixth Coyote","slot":"Chest Armor"},{"name":"The Stag","slot":"Helmet"},{"name":"Transversive Steps","slot":"Leg Armor"},{"name":"Triton Vice","slot":"Gauntlets"},{"name":"Ursa Furiosa","slot":"Gauntlets"},{"name":"Verity's Brow","slot":"Helmet"},{"name":"Vesper of Radius","slot":"Chest Armor"},{"name":"Wings of Sacred Dawn","slot":"Chest Armor"},{"name":"Winter's Guile","slot":"Gauntlets"},{"name":"Wishful Ignorance","slot":"Gauntlets"},{"name":"Wormgod Caress","slot":"Gauntlets"},{"name":"Wormhusk Crown","slot":"Helmet"},{"name":"Young Ahamkara's Spine","slot":"Gauntlets"}];
+const EXOTICS_GROUP = 'Exotics';
+EXOTICS.slice().sort((a,b) => a.name.localeCompare(b.name)).forEach(ex => {
+  COMBOS.push({
+    id: [EXOTICS_GROUP, ex.slot, ex.name].join('/'),
+    setName: EXOTICS_GROUP, source: 'Every currently obtainable exotic armor piece',
+    slot: ex.slot,
+    name: ex.name,
+    isExotic: true,
+  });
+});
+
+// Sets plus the Exotics group, for anything that iterates top-level sections.
+const GROUPS = [{ name: EXOTICS_GROUP, source: 'Every currently obtainable exotic armor piece', isExoticGroup: true }, ...SETS];
+
+const DEFAULT_RECORD = { owned:false, tertiaries:[] };
+
+const state = {
+  records: {},
+  query: '',
+  status: 'all',
+  collapsed: new Set(GROUPS.map(s => s.name)), // every set (and Exotics) starts collapsed
+  collapsedSlots: new Set(),                 // 'SetName|Slot' — slots start open within an opened set
+  expanded: new Set(),
+};
+
+function getRecord(id){ return state.records[id] || DEFAULT_RECORD; }
+function setRecord(id, patch){
+  const cur = state.records[id] || { ...DEFAULT_RECORD };
+  state.records[id] = { ...cur, ...patch };
+  return state.records[id];
+}
+function isExpanded(id){
+  return state.query.length > 0 || state.expanded.has(id);
+}
+
+let dbRef = null;
+
+function normalizeRecord(raw){
+  if(raw && typeof raw === 'object'){
+    let tertiaries = [];
+    if(Array.isArray(raw.tertiaries)){
+      tertiaries = raw.tertiaries.filter(s => typeof s === 'string');
+    }else if(typeof raw.tertiary === 'string' && raw.tertiary){
+      // migrate the older single-select field
+      tertiaries = [raw.tertiary];
+    }
+    return {
+      owned: !!raw.owned,
+      tertiaries,
+    };
+  }
+  return { ...DEFAULT_RECORD };
+}
+
+function loadLocal(){
+  try{
+    const raw = localStorage.getItem('armorVaultRecords');
+    if(raw){
+      const obj = JSON.parse(raw);
+      Object.keys(obj).forEach(k => { state.records[k] = normalizeRecord(obj[k]); });
+    }
+  }catch(e){}
+}
+function saveLocal(){
+  try{ localStorage.setItem('armorVaultRecords', JSON.stringify(state.records)); }catch(e){}
+}
+
+function setSync(mode){
+  const pill = document.getElementById('syncPill');
+  const label = document.getElementById('syncLabel');
+  pill.dataset.state = mode;
+  const labels = {
+    local: 'Saved on this device',
+    syncing: 'Syncing…',
+    synced: 'Synced to your account',
+    error: 'Sync error — saved locally',
+  };
+  label.textContent = labels[mode] || mode;
+  const mini = document.getElementById('syncDotMini');
+  if(mini) mini.className = 'header-slim-dot' + (mode ? ' ' + mode : '');
+}
+
+async function initDb(){
+  loadLocal();
+  renderAll();
+
+  let db = null;
+  try{
+    db = window.claude && window.claude.use ? await window.claude.use('db') : null;
+  }catch(e){ db = null; }
+
+  if(!db){
+    setSync('local');
+    return;
+  }
+
+  dbRef = db.doc('state/armor');
+
+  try{
+    const snap = await dbRef.get();
+    if(!snap.exists){
+      await dbRef.set({});
+    }
+  }catch(e){
+    setSync('error');
+  }
+
+  dbRef.onSnapshot(snap => {
+    const data = snap.data() || {};
+    Object.keys(data).forEach(key => {
+      state.records[key] = normalizeRecord(data[key]);
+    });
+    setSync(snap.metadata && snap.metadata.hasPendingWrites ? 'syncing' : 'synced');
+    renderAll();
+  }, err => {
+    setSync('error');
+  });
+}
+
+function pushRecord(id, patch){
+  saveLocal();
+  if(dbRef){
+    setSync('syncing');
+    dbRef.update({ [id]: patch }).catch(() => setSync('error'));
+  }
+}
+
+function afterRecordChange(combo){
+  updateProgress();
+  if(state.status !== 'all'){
+    renderAll();
+  }else{
+    replaceRow(combo);
+  }
+}
+
+function toggleOwned(combo){
+  const rec = getRecord(combo.id);
+  const patch = rec.owned ? { owned:false } : { owned:true };
+  setRecord(combo.id, patch);
+  pushRecord(combo.id, patch);
+  afterRecordChange(combo);
+}
+
+function toggleTertiary(combo, stat){
+  const rec = getRecord(combo.id);
+  const has = rec.tertiaries.includes(stat);
+  const tertiaries = has ? rec.tertiaries.filter(s => s !== stat) : [...rec.tertiaries, stat];
+  const patch = { tertiaries };
+  // Selecting the last remaining tertiary means every possible roll of this
+  // archetype has been farmed, so mark it owned automatically.
+  if(!has && tertiaries.length === combo.tertiaryOptions.length){
+    patch.owned = true;
+  }
+  setRecord(combo.id, patch);
+  pushRecord(combo.id, patch);
+  afterRecordChange(combo);
+}
+
+// ---------- rendering ----------
+function matchesFilters(combo){
+  const rec = getRecord(combo.id);
+  if(state.status === 'owned' && !rec.owned) return false;
+  if(state.status === 'unowned' && rec.owned) return false;
+  if(state.query){
+    const hay = combo.isExotic
+      ? (combo.name + ' ' + combo.slot + ' ' + combo.setName).toLowerCase()
+      : (combo.setName + ' ' + combo.source + ' ' + combo.archetype + ' ' + combo.primary + ' ' + combo.secondary + ' ' + combo.tertiaryOptions.join(' ')).toLowerCase();
+    if(!hay.includes(state.query)) return false;
+  }
+  return true;
+}
+
+function statPill(stat){
+  const span = document.createElement('span');
+  span.className = 'stat-pill';
+  span.style.background = `var(${STAT_VAR[stat]})`;
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  span.appendChild(dot);
+  span.appendChild(document.createTextNode(stat));
+  return span;
+}
+
+function buildRow(combo){
+  const rec = getRecord(combo.id);
+  const row = document.createElement('div');
+  const edited = rec.owned || rec.tertiaries.length > 0;
+  row.className = 'row' + (rec.owned ? ' owned' : '') + (edited ? ' edited' : '') + (isExpanded(combo.id) ? ' expanded' : '');
+  row.dataset.id = combo.id;
+
+  const check = document.createElement('input');
+  check.type = 'checkbox';
+  check.className = 'row-check';
+  check.checked = rec.owned;
+  check.setAttribute('aria-label', 'Mark ' + combo.archetype + ' as farmed for ' + combo.setName + ' ' + combo.slot);
+  check.addEventListener('click', e => e.stopPropagation());
+  check.addEventListener('change', () => toggleOwned(combo));
+  row.appendChild(check);
+
+  const main = document.createElement('div');
+  main.className = 'row-main';
+
+  const nameLine = document.createElement('div');
+  nameLine.className = 'row-name-line';
+  const name = document.createElement('span');
+  name.className = 'row-name';
+  name.textContent = combo.archetype;
+  nameLine.appendChild(name);
+  main.appendChild(nameLine);
+
+  const meta = document.createElement('div');
+  meta.className = 'row-meta';
+  meta.appendChild(statPill(combo.primary));
+  meta.appendChild(statPill(combo.secondary));
+  if(rec.tertiaries.length){
+    const sep = document.createElement('span');
+    sep.className = 'sep';
+    sep.textContent = '+';
+    meta.appendChild(sep);
+    const tag = document.createElement('span');
+    tag.className = 'tertiary-tag';
+    tag.textContent = rec.tertiaries.join('/') + ' (tertiary)';
+    meta.appendChild(tag);
+  }
+  main.appendChild(meta);
+
+  const detail = document.createElement('div');
+  detail.className = 'row-detail';
+
+  const block = document.createElement('div');
+  block.className = 'roll-block';
+
+  const title = document.createElement('span');
+  title.className = 'roll-title';
+  title.textContent = 'Stat Roll';
+  block.appendChild(title);
+
+  const fixedRow = document.createElement('div');
+  fixedRow.className = 'fixed-stats-row';
+  [['Primary (30)', combo.primary], ['Secondary (25)', combo.secondary]].forEach(([label, stat]) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'fixed-stat';
+    const l = document.createElement('span');
+    l.className = 'roll-col-label';
+    l.textContent = label;
+    wrap.appendChild(l);
+    wrap.appendChild(statPill(stat));
+    fixedRow.appendChild(wrap);
+  });
+  block.appendChild(fixedRow);
+
+  const tertWrap = document.createElement('div');
+  tertWrap.className = 'tertiary-picker';
+  const tertLabel = document.createElement('span');
+  tertLabel.className = 'roll-col-label';
+  tertLabel.textContent = 'Tertiary (20) — select every one you\'ve farmed a roll with';
+  tertWrap.appendChild(tertLabel);
+  const tertOpts = document.createElement('div');
+  tertOpts.className = 'tertiary-options';
+  combo.tertiaryOptions.forEach(stat => {
+    const isSelected = rec.tertiaries.includes(stat);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tert-btn' + (isSelected ? ' active' : '');
+    btn.textContent = (isSelected ? '✓ ' : '') + stat;
+    btn.addEventListener('click', e => { e.stopPropagation(); toggleTertiary(combo, stat); });
+    tertOpts.appendChild(btn);
+  });
+  tertWrap.appendChild(tertOpts);
+  block.appendChild(tertWrap);
+
+  const note = document.createElement('div');
+  note.className = 'tier-note';
+  note.textContent = 'Values shown are at Tier 5 (fully masterworked). Any ' + combo.setName + ' ' + combo.slot + ' can roll as ' + combo.archetype + '.';
+  block.appendChild(note);
+
+  detail.appendChild(block);
+  main.appendChild(detail);
+  row.appendChild(main);
+
+  row.addEventListener('click', () => {
+    if(state.expanded.has(combo.id)) state.expanded.delete(combo.id);
+    else state.expanded.add(combo.id);
+    row.classList.toggle('expanded', isExpanded(combo.id));
+  });
+
+  return row;
+}
+
+function buildExoticRow(combo){
+  const rec = getRecord(combo.id);
+  const row = document.createElement('div');
+  row.className = 'row' + (rec.owned ? ' owned edited' : '');
+  row.style.cursor = 'default';
+  row.dataset.id = combo.id;
+
+  const check = document.createElement('input');
+  check.type = 'checkbox';
+  check.className = 'row-check';
+  check.checked = rec.owned;
+  check.setAttribute('aria-label', 'Mark ' + combo.name + ' as farmed');
+  check.addEventListener('change', () => toggleOwned(combo));
+  row.appendChild(check);
+
+  const main = document.createElement('div');
+  main.className = 'row-main';
+  const nameLine = document.createElement('div');
+  nameLine.className = 'row-name-line';
+  const name = document.createElement('span');
+  name.className = 'row-name';
+  name.textContent = combo.name;
+  nameLine.appendChild(name);
+  main.appendChild(nameLine);
+  row.appendChild(main);
+
+  return row;
+}
+
+const SLOT_ICONS = {
+  'Helmet': '<path d="M4 12a8 8 0 0 1 16 0v3a2 2 0 0 1-2 2h-1v-3a5 5 0 0 0-10 0v3H6a2 2 0 0 1-2-2z"/>',
+  'Gauntlets': '<path d="M7 3v6M12 3v7M17 3v6M5 9h14l-1 8a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3z"/>',
+  'Chest Armor': '<path d="M6 4l6 2 6-2 2 6-3 2v9a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-9l-3-2z"/>',
+  'Leg Armor': '<path d="M8 3h8v6l-2 4 1 8h-3l-1-7-1 7H7l1-8-2-4z"/>',
+  'Class Item': '<path d="M12 3l8 4-8 4-8-4z"/><path d="M4 11l8 4 8-4M4 15l8 4 8-4"/>',
+};
+
+// A sticky row of slot-icon buttons for a section: jumping to a slot collapses
+// every other slot in that section so the jump lands on a clean, focused view.
+// The jump bar is a single fixed element that tracks whichever expanded
+// section is currently scrolled into view, rather than living inside each
+// section — position:sticky is fragile across nested/embedded contexts,
+// so this uses position:fixed plus a scroll listener instead.
+let slotJumpActiveSection = null;
+
+// Native scrollIntoView doesn't know the fixed header + jump bar cover the
+// top of the viewport, so it lands the target's title and first row right
+// underneath them. Scroll manually to just below the jump bar instead.
+function scrollToSlotGroup(target){
+  const bar = document.getElementById('slotJumpBar');
+  const headerH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 56;
+  const clearance = (bar && !bar.hidden) ? bar.getBoundingClientRect().bottom : headerH;
+  const rect = target.getBoundingClientRect();
+  const top = window.scrollY + rect.top - clearance - 8;
+  window.scrollTo({ top: Math.max(top, 0), behavior: 'smooth' });
+}
+
+function findActiveSection(){
+  const headerH = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 56) + 8;
+  const sections = [...document.querySelectorAll('.section:not(.collapsed)')];
+  let active = null;
+  for(const sec of sections){
+    const rect = sec.getBoundingClientRect();
+    if(rect.top <= headerH && rect.bottom > headerH){
+      active = sec;
+    }
+  }
+  return active;
+}
+
+function updateSlotJumpBarHighlight(section){
+  const bar = document.getElementById('slotJumpBar');
+  [...bar.children].forEach(btn => {
+    const grp = section.querySelector('.slot-group[data-slot="' + CSS.escape(btn.dataset.slot) + '"]');
+    btn.classList.toggle('active', !!(grp && !grp.classList.contains('collapsed')));
+  });
+}
+
+function updateSlotJumpBar(){
+  const bar = document.getElementById('slotJumpBar');
+  const section = findActiveSection();
+
+  if(!section){
+    bar.hidden = true;
+    bar.innerHTML = '';
+    slotJumpActiveSection = null;
+    return;
+  }
+
+  const groupName = section.dataset.set;
+  const slotsPresent = [...section.querySelectorAll('.slot-group')].map(g => g.dataset.slot);
+  if(slotsPresent.length < 2){
+    bar.hidden = true;
+    bar.innerHTML = '';
+    slotJumpActiveSection = null;
+    return;
+  }
+
+  if(slotJumpActiveSection !== section){
+    bar.innerHTML = '';
+    slotsPresent.forEach(slot => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'slot-jump-btn';
+      btn.dataset.slot = slot;
+      btn.title = 'Jump to ' + slot;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${SLOT_ICONS[slot] || ''}</svg>`;
+      btn.addEventListener('click', () => {
+        slotsPresent.forEach(s => {
+          const key = groupName + '|' + s;
+          const grp = section.querySelector('.slot-group[data-slot="' + CSS.escape(s) + '"]');
+          if(s === slot){
+            state.collapsedSlots.delete(key);
+            if(grp) grp.classList.remove('collapsed');
+          }else{
+            state.collapsedSlots.add(key);
+            if(grp) grp.classList.add('collapsed');
+          }
+        });
+        const target = section.querySelector('.slot-group[data-slot="' + CSS.escape(slot) + '"]');
+        if(target) scrollToSlotGroup(target);
+        updateSlotJumpBarHighlight(section);
+      });
+      bar.appendChild(btn);
+    });
+    slotJumpActiveSection = section;
+  }
+
+  bar.hidden = false;
+  updateSlotJumpBarHighlight(section);
+}
+
+let slotJumpScrollQueued = false;
+function onScrollForJumpBar(){
+  if(slotJumpScrollQueued) return;
+  slotJumpScrollQueued = true;
+  requestAnimationFrame(() => {
+    slotJumpScrollQueued = false;
+    updateSlotJumpBar();
+  });
+}
+
+function renderAll(){
+  const sectionsEl = document.getElementById('sections');
+  sectionsEl.innerHTML = '';
+
+  let anyVisible = false;
+
+  GROUPS.forEach(set => {
+    const setItems = COMBOS.filter(c => c.setName === set.name && matchesFilters(c));
+    if(setItems.length === 0) return;
+    anyVisible = true;
+
+    const section = document.createElement('div');
+    section.className = 'section' + (state.collapsed.has(set.name) ? ' collapsed' : '');
+    section.dataset.set = set.name;
+
+    const ownedInSection = setItems.reduce((n, c) => n + (getRecord(c.id).owned ? 1 : 0), 0);
+
+    const head = document.createElement('div');
+    head.className = 'section-head';
+    head.innerHTML = `
+      <div class="set-head-text">
+        <span class="section-title">${set.name}</span>
+        <span class="set-source">${set.source}</span>
+      </div>
+      <span class="section-count">${ownedInSection} / ${setItems.length}</span>
+      <svg class="section-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+    `;
+    head.addEventListener('click', () => {
+      if(state.collapsed.has(set.name)) state.collapsed.delete(set.name);
+      else state.collapsed.add(set.name);
+      section.classList.toggle('collapsed');
+      updateSlotJumpBar();
+    });
+    section.appendChild(head);
+
+    const body = document.createElement('div');
+    body.className = 'section-body';
+
+    SLOTS.forEach(slot => {
+      const slotItems = setItems.filter(c => c.slot === slot);
+      if(slotItems.length === 0) return;
+      const slotOwned = slotItems.reduce((n, c) => n + (getRecord(c.id).owned ? 1 : 0), 0);
+
+      const slotKey = set.name + '|' + slot;
+      const slotGroup = document.createElement('div');
+      slotGroup.className = 'slot-group' + (state.collapsedSlots.has(slotKey) ? ' collapsed' : '');
+      slotGroup.dataset.slot = slot;
+
+      const slotHead = document.createElement('div');
+      slotHead.className = 'slot-head';
+      slotHead.innerHTML = `
+        <span class="slot-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${SLOT_ICONS[slot] || ''}</svg></span>
+        <span class="slot-head-title">${slot}</span>
+        <span class="slot-head-count">${slotOwned} / ${slotItems.length}</span>
+        <svg class="slot-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+      `;
+      slotHead.addEventListener('click', () => {
+        if(state.collapsedSlots.has(slotKey)) state.collapsedSlots.delete(slotKey);
+        else state.collapsedSlots.add(slotKey);
+        slotGroup.classList.toggle('collapsed');
+        updateSlotJumpBar();
+      });
+      slotGroup.appendChild(slotHead);
+
+      const rows = document.createElement('div');
+      rows.className = 'slot-rows';
+      slotItems.forEach(c => rows.appendChild(c.isExotic ? buildExoticRow(c) : buildRow(c)));
+      slotGroup.appendChild(rows);
+
+      body.appendChild(slotGroup);
+    });
+
+    section.appendChild(body);
+    sectionsEl.appendChild(section);
+  });
+
+  document.getElementById('emptyState').hidden = anyVisible;
+  updateProgress();
+  slotJumpActiveSection = null;
+  updateSlotJumpBar();
+}
+
+function replaceRow(combo){
+  const old = document.querySelector('.row[data-id="' + CSS.escape(combo.id) + '"]');
+  if(!old) return;
+  const fresh = combo.isExotic ? buildExoticRow(combo) : buildRow(combo);
+  old.replaceWith(fresh);
+  updateCounts(combo);
+}
+
+function updateCounts(combo){
+  const section = document.querySelector('.section[data-set="' + CSS.escape(combo.setName) + '"]');
+  if(!section) return;
+
+  const slotGroup = section.querySelector('.slot-group[data-slot="' + CSS.escape(combo.slot) + '"]');
+  if(slotGroup){
+    const slotCountEl = slotGroup.querySelector('.slot-head-count');
+    const slotTotal = slotGroup.querySelectorAll('.row').length;
+    const slotOwned = slotGroup.querySelectorAll('.row.owned').length;
+    if(slotCountEl) slotCountEl.textContent = slotOwned + ' / ' + slotTotal;
+  }
+
+  const countEl = section.querySelector('.section-count');
+  const total = section.querySelectorAll('.row').length;
+  const ownedN = section.querySelectorAll('.row.owned').length;
+  if(countEl) countEl.textContent = ownedN + ' / ' + total;
+}
+
+function updateProgress(){
+  const total = COMBOS.length;
+  const owned = COMBOS.reduce((n, c) => n + (getRecord(c.id).owned ? 1 : 0), 0);
+  document.getElementById('ownedCount').textContent = owned;
+  document.getElementById('totalCount').textContent = total;
+  document.getElementById('ownedCountMini').textContent = owned;
+  document.getElementById('totalCountMini').textContent = total;
+  document.getElementById('footTotal').textContent = total;
+  document.getElementById('footSets').textContent = SETS.length;
+  document.getElementById('footExotics').textContent = EXOTICS.length;
+  document.getElementById('progressFill').style.width = (total ? (owned / total * 100) : 0).toFixed(1) + '%';
+}
+
+// ---------- controls ----------
+function updateHeaderHeightVar(){
+  const header = document.querySelector('header.top');
+  if(header) document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
+}
+
+function wireControls(){
+  const headerToggle = document.getElementById('headerToggle');
+  const headerFull = document.getElementById('headerFull');
+  let headerCollapsed = false;
+  try{ headerCollapsed = localStorage.getItem('armorVaultHeaderCollapsed') === '1'; }catch(e){}
+  const applyHeaderState = () => {
+    headerToggle.classList.toggle('collapsed', headerCollapsed);
+    headerFull.classList.toggle('collapsed', headerCollapsed);
+    requestAnimationFrame(() => { updateHeaderHeightVar(); updateSlotJumpBar(); });
+  };
+  applyHeaderState();
+  headerToggle.addEventListener('click', () => {
+    headerCollapsed = !headerCollapsed;
+    applyHeaderState();
+    try{ localStorage.setItem('armorVaultHeaderCollapsed', headerCollapsed ? '1' : '0'); }catch(e){}
+  });
+  window.addEventListener('resize', updateHeaderHeightVar);
+
+  document.getElementById('searchInput').addEventListener('input', e => {
+    state.query = e.target.value.trim().toLowerCase();
+    renderAll();
+  });
+
+  document.getElementById('statusChips').addEventListener('click', e => {
+    const btn = e.target.closest('button.chip');
+    if(!btn) return;
+    if(btn.dataset.status){
+      state.status = btn.dataset.status;
+      [...document.querySelectorAll('#statusChips [data-status]')].forEach(b => b.classList.toggle('active', b === btn));
+      renderAll();
+    }else if(btn.dataset.action === 'expand'){
+      state.collapsed.clear();
+      state.collapsedSlots.clear();
+      renderAll();
+    }else if(btn.dataset.action === 'collapse'){
+      GROUPS.forEach(s => {
+        state.collapsed.add(s.name);
+        SLOTS.forEach(slot => state.collapsedSlots.add(s.name + '|' + slot));
+      });
+      renderAll();
+    }
+  });
+}
+
+wireControls();
+initDb();
+updateHeaderHeightVar();
+window.addEventListener('load', updateHeaderHeightVar);
+window.addEventListener('resize', updateSlotJumpBar);
+window.addEventListener('scroll', onScrollForJumpBar, { passive: true });
+</script>
+
+</body>
+</html>

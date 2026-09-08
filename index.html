@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Destiny 2 Trackers</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎯</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders:wght@700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef0f3;
+    --surface:#ffffff;
+    --text:#1a1e24;
+    --text-dim:#5c6572;
+    --text-faint:#8790a0;
+    --border:#dbdfe4;
+    --accent:#a8701c;
+    --shadow:0 1px 2px rgba(20,24,30,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#12151a;
+      --surface:#1a1e25;
+      --text:#e9ebef;
+      --text-dim:#9aa3b1;
+      --text-faint:#6b7382;
+      --border:#2a2f38;
+      --accent:#e3a13d;
+      --shadow:0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#12151a;
+    --surface:#1a1e25;
+    --text:#e9ebef;
+    --text-dim:#9aa3b1;
+    --text-faint:#6b7382;
+    --border:#2a2f38;
+    --accent:#e3a13d;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--bg);
+    color:var(--text);
+    font-family:"Work Sans",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  main{
+    max-width:520px;
+    width:100%;
+  }
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    text-align:center;
+  }
+  h1{
+    font-family:"Big Shoulders",sans-serif;
+    font-weight:800;
+    font-size:36px;
+    text-align:center;
+    margin:4px 0 8px;
+    text-wrap:balance;
+  }
+  p.sub{
+    text-align:center;
+    color:var(--text-dim);
+    font-size:14px;
+    margin:0 0 28px;
+    line-height:1.5;
+  }
+  .cards{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  a.card{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    padding:18px 20px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:12px;
+    box-shadow:var(--shadow);
+    text-decoration:none;
+    color:inherit;
+  }
+  a.card:hover{border-color:var(--accent);}
+  .card-icon{
+    font-size:28px;
+    flex:none;
+    width:44px;
+    text-align:center;
+  }
+  .card-title{
+    font-family:"Big Shoulders",sans-serif;
+    font-weight:700;
+    font-size:19px;
+    letter-spacing:.01em;
+  }
+  .card-desc{
+    font-size:12.5px;
+    color:var(--text-faint);
+    margin-top:2px;
+  }
+  footer{
+    text-align:center;
+    margin-top:28px;
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    color:var(--text-faint);
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Destiny 2</div>
+  <h1>Trackers</h1>
+  <p class="sub">Checklists for tracking which weapon rolls and armor archetypes you've farmed. Everything you check is saved in your own browser only.</p>
+  <div class="cards">
+    <a class="card" href="weapon-vault.html">
+      <span class="card-icon">🎯</span>
+      <span>
+        <span class="card-title">Weapon Vault</span>
+        <div class="card-desc">748 weapon rolls &middot; god-roll checklist</div>
+      </span>
+    </a>
+    <a class="card" href="armor-vault.html">
+      <span class="card-icon">🛡️</span>
+      <span>
+        <span class="card-title">Armor Vault</span>
+        <div class="card-desc">56 sets + 141 exotics &middot; Armor 3.0 tracker</div>
+      </span>
+    </a>
+  </div>
+  <footer>No account needed &middot; progress saves locally in this browser</footer>
+</main>
+</body>
+</html>
