@@ -45,6 +45,10 @@
     --tier-god:#2e7d32;
     --tier-god-ink:#ffffff;
 
+    --pop-1:#b8860b;
+    --pop-2:#8a94a3;
+    --pop-3:#a15c2e;
+
     --radius-sm:6px;
     --radius-md:10px;
   }
@@ -77,6 +81,10 @@
       --tier-good-ink:#1a1305;
       --tier-god:#4fae54;
       --tier-god-ink:#041405;
+
+      --pop-1:#e0b23e;
+      --pop-2:#aeb8c4;
+      --pop-3:#d08a52;
     }
   }
   :root[data-theme="dark"]{
@@ -106,6 +114,10 @@
     --tier-good-ink:#1a1305;
     --tier-god:#4fae54;
     --tier-god-ink:#041405;
+
+    --pop-1:#e0b23e;
+    --pop-2:#aeb8c4;
+    --pop-3:#d08a52;
   }
 
   *{box-sizing:border-box;}
@@ -346,6 +358,25 @@
   button.chip .dot{
     width:8px;height:8px;border-radius:50%;
     flex:none;
+  }
+  .pop-legend{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:12px;
+    font-size:11px;
+    color:var(--text-faint);
+    padding:2px 2px 0;
+  }
+  .pop-legend-item{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+  }
+  .pop-legend .dot{
+    width:8px;height:8px;border-radius:50%;
+    flex:none;
+    box-shadow:0 0 0 1px rgba(0,0,0,.15) inset;
   }
   button.chip:focus-visible, a:focus-visible, input:focus-visible, .row:focus-visible{
     outline:2px solid var(--accent);
@@ -625,6 +656,9 @@
     color:var(--accent-ink);
     font-weight:600;
   }
+  .roll-pill.pop-1{box-shadow:0 0 0 2px var(--pop-1) inset;}
+  .roll-pill.pop-2{box-shadow:0 0 0 2px var(--pop-2) inset;}
+  .roll-pill.pop-3{box-shadow:0 0 0 2px var(--pop-3) inset;}
   .roll-or{
     color:var(--text-faint);
     font-size:11px;
@@ -776,6 +810,13 @@
         </div>
 
         <div class="chip-scroller" id="elementChips"></div>
+
+        <div class="pop-legend">
+          <span class="pop-legend-item"><span class="dot" style="background:var(--pop-1)"></span>Most picked perk</span>
+          <span class="pop-legend-item"><span class="dot" style="background:var(--pop-2)"></span>2nd most picked</span>
+          <span class="pop-legend-item"><span class="dot" style="background:var(--pop-3)"></span>3rd most picked</span>
+          <span class="pop-legend-item">(community roll data via light.gg)</span>
+        </div>
       </div>
     </div>
   </div>
@@ -1066,7 +1107,8 @@ function buildRollBlock(w){
   if(w.rollCols && w.rollCols.length){
     const grid = document.createElement('div');
     grid.className = 'roll-cols';
-    w.rollCols.forEach((opts, i) => {
+    const rankedCols = w.rollColsRanked || w.rollCols.map(col => col.map(name => ({name, pct: null})));
+    rankedCols.forEach((opts, i) => {
       const colWrap = document.createElement('div');
       const label = document.createElement('span');
       label.className = 'roll-col-label';
@@ -1074,6 +1116,7 @@ function buildRollBlock(w){
       colWrap.appendChild(label);
       const optsWrap = document.createElement('div');
       optsWrap.className = 'roll-opts';
+      let popRank = 0;
       opts.forEach((opt, j) => {
         if(j > 0){
           const or = document.createElement('span');
@@ -1081,13 +1124,19 @@ function buildRollBlock(w){
           or.textContent = 'or';
           optsWrap.appendChild(or);
         }
-        const isSelected = rec[PERK_KEYS[i]].includes(opt);
+        const isSelected = rec[PERK_KEYS[i]].includes(opt.name);
         const pill = document.createElement('button');
         pill.type = 'button';
-        pill.className = 'roll-pill selectable' + (isSelected ? ' selected' : '');
-        pill.textContent = (isSelected ? '✓ ' : '') + opt;
-        pill.title = 'Mark every perk you have in Col ' + (i + 1);
-        pill.addEventListener('click', e => { e.stopPropagation(); setPerk(w, i, opt); });
+        let cls = 'roll-pill selectable' + (isSelected ? ' selected' : '');
+        if(opt.pct !== null && opt.pct !== undefined){
+          popRank++;
+          if(popRank <= 3) cls += ' pop-' + popRank;
+        }
+        pill.className = cls;
+        pill.textContent = (isSelected ? '✓ ' : '') + opt.name;
+        pill.title = 'Mark every perk you have in Col ' + (i + 1) +
+          (opt.pct !== null && opt.pct !== undefined ? ' — ' + opt.pct + '% of community rolls (light.gg)' : '');
+        pill.addEventListener('click', e => { e.stopPropagation(); setPerk(w, i, opt.name); });
         optsWrap.appendChild(pill);
       });
       colWrap.appendChild(optsWrap);
