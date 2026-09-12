@@ -837,7 +837,7 @@ const GRADE_VAR = {S:'--gr-s',A:'--gr-a',B:'--gr-b',C:'--gr-c',D:'--gr-d',E:'--g
 const ELEMENTS = ['Kinetic','Arc','Solar','Void','Stasis','Strand'];
 const ELEMENT_VAR = {Kinetic:'--el-kinetic',Arc:'--el-arc',Solar:'--el-solar',Void:'--el-void',Stasis:'--el-stasis',Strand:'--el-strand'};
 
-const DEFAULT_RECORD = { owned:false, rollTier:'none', mod:'', hasFocus:false, perk0:[], perk1:[], perk2:[], perk3:[] };
+const DEFAULT_RECORD = { owned:false, rollTier:'none', mod:'', hasFocus:false, autoGod:false, perk0:[], perk1:[], perk2:[], perk3:[] };
 const ROLL_TIERS = ['basic','good','god'];
 const PERK_KEYS = ['perk0','perk1','perk2','perk3'];
 
@@ -891,6 +891,7 @@ function normalizeRecord(raw){
       rollTier,
       mod: typeof raw.mod === 'string' ? raw.mod : '',
       hasFocus: !!raw.hasFocus,
+      autoGod: !!raw.autoGod,
     };
     PERK_KEYS.forEach(k => {
       if(Array.isArray(raw[k])){
@@ -1018,8 +1019,8 @@ function toggleOwned(w){
 function setRollTier(w, tier){
   const rec = getRecord(w.id);
   const patch = rec.rollTier === tier
-    ? { rollTier: 'none' }
-    : { rollTier: tier, owned: true };
+    ? { rollTier: 'none', autoGod: false }
+    : { rollTier: tier, owned: true, autoGod: false };
   setRecord(w.id, patch);
   pushRecord(w.id, patch);
   afterRecordChange(w);
@@ -1031,9 +1032,26 @@ function setMod(w, text){
   pushRecord(w.id, patch);
 }
 
+// if patch fills the last empty perk column, or checks the priority-mod box,
+// while every other required condition already holds, auto-flag the roll as
+// god-tier; if a later change breaks one of those conditions and the god tier
+// was set by this auto behavior (not a manual "Mark God Roll" click), revert it
+function mergeAutoGod(prevRec, patch){
+  const next = { ...prevRec, ...patch };
+  const allColsFilled = PERK_KEYS.every(k => next[k].length > 0);
+  const shouldBeGod = allColsFilled && next.hasFocus;
+  if(shouldBeGod && next.rollTier !== 'god'){
+    return { ...patch, rollTier: 'god', owned: true, autoGod: true };
+  }
+  if(!shouldBeGod && prevRec.autoGod && next.rollTier === 'god'){
+    return { ...patch, rollTier: 'none', autoGod: false };
+  }
+  return patch;
+}
+
 function toggleFocus(w){
   const rec = getRecord(w.id);
-  const patch = { hasFocus: !rec.hasFocus };
+  const patch = mergeAutoGod(rec, { hasFocus: !rec.hasFocus });
   setRecord(w.id, patch);
   pushRecord(w.id, patch);
   afterRecordChange(w);
@@ -1044,7 +1062,7 @@ function setPerk(w, colIndex, perkName){
   const key = PERK_KEYS[colIndex];
   const has = rec[key].includes(perkName);
   const next = has ? rec[key].filter(s => s !== perkName) : [...rec[key], perkName];
-  const patch = { [key]: next };
+  const patch = mergeAutoGod(rec, { [key]: next });
   setRecord(w.id, patch);
   pushRecord(w.id, patch);
   afterRecordChange(w);
