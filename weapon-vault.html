@@ -1163,6 +1163,20 @@ function buildRollBlock(w){
     block.appendChild(grid);
   }
 
+  if(w.archetype){
+    const archRow = document.createElement('div');
+    archRow.className = 'roll-origin';
+    const label = document.createElement('span');
+    label.className = 'roll-col-label';
+    label.textContent = 'Archetype';
+    archRow.appendChild(label);
+    const pill = document.createElement('span');
+    pill.className = 'roll-pill';
+    pill.textContent = w.archetype;
+    archRow.appendChild(pill);
+    block.appendChild(archRow);
+  }
+
   if(w.origin){
     const originRow = document.createElement('div');
     originRow.className = 'roll-origin';
