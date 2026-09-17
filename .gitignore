@@ -1,0 +1,2 @@
+tests/browser/generated-*.html
+tests/browser/mock-runtime.js
