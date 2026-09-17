@@ -23,9 +23,14 @@
     const fields=h('div',undefined,'scan-fields');
     const keyLabel=h('label','API key'),keyInput=h('input');keyInput.type='password';keyInput.autocomplete='off';keyInput.setAttribute('aria-label','Bungie API key');keyLabel.append(keyInput);
     const idLabel=h('label','OAuth client ID'),idInput=h('input');idInput.inputMode='numeric';idInput.autocomplete='off';idInput.setAttribute('aria-label','Bungie OAuth client ID');idLabel.append(idInput);fields.append(keyLabel,idLabel);setup.append(fields);
-    setup.append(h('small','Credentials stay in this browser tab’s session and go directly to Bungie. Public-client sign-in expires after about an hour; reconnect when asked.'));
+    function fillSavedSettings(){const saved=api.savedConfiguration();keyInput.value=saved?.apiKey || '';idInput.value=saved?.clientId || '';}
+    fillSavedSettings();
+    setup.append(h('small','Save settings or Connect Bungie remembers the API key and client ID in this browser for both vaults. Your sign-in token stays in this tab and expires after about an hour; reconnect using the saved settings when asked.'));
     const connActions=h('div',undefined,'scan-actions');
-    connActions.append(button('Connect Bungie',()=>{try{api.begin(keyInput.value.trim(),idInput.value.trim());}catch(e){status(e.message,true);}},'primary'),button('Disconnect',()=>{api.disconnect();client=null;result=null;report.replaceChildren();keyInput.value='';idInput.value='';status('Disconnected. Saved checklist progress is retained.');refreshConnection();}));setup.append(connActions);
+    connActions.append(button('Save settings',()=>{try{api.saveConfiguration(keyInput.value,idInput.value);fillSavedSettings();status('API key and client ID saved in this browser. Use Connect Bungie to sign in.');}catch(e){status(e.message,true);}}),
+      button('Connect Bungie',()=>{try{api.begin(keyInput.value,idInput.value);}catch(e){status(e.message,true);}},'primary'),
+      button('Disconnect',()=>{api.disconnect();client=null;result=null;report.replaceChildren();fillSavedSettings();status('Disconnected. Your app settings and checklist progress are still saved.');refreshConnection();}),
+      button('Forget saved settings',()=>{try{api.forgetConfiguration();client=null;result=null;report.replaceChildren();fillSavedSettings();status('Saved API key and client ID removed. Disconnected; checklist progress is retained.');refreshConnection();}catch(e){status(e.message,true);}}));setup.append(connActions);
     const controls=h('div',undefined,'scan-actions'),accountSelect=h('select');accountSelect.setAttribute('aria-label','Destiny account');
     accountSelect.addEventListener('change',()=>{result=null;report.replaceChildren();client=api.client(accounts[Number(accountSelect.value)]);updateButtons();});
     const scanButton=button('Scan vault + characters',()=>run(scanLive),'primary');

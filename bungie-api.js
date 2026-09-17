@@ -2,21 +2,51 @@
   'use strict';
   const BASE = 'https://www.bungie.net';
   const CONFIG = 'vaultBungieConfig', TOKEN = 'vaultBungieToken', PENDING = 'vaultBungiePending';
+  const SAVED = 'vaultBungieSavedConfig';
   const COMPONENTS = '100,102,200,201,205,300,304,305,310';
   function stored(key) { try { return JSON.parse(sessionStorage.getItem(key) || 'null'); } catch { return null; } }
   function configuration() { return stored(CONFIG); }
+  const validConfiguration=config=>typeof config?.apiKey==='string' && /^[A-Za-z0-9_-]{16,256}$/.test(config.apiKey) && typeof config?.clientId==='string' && /^\d{1,12}$/.test(config.clientId);
+  function saveConfiguration(apiKey,clientId) {
+    const config={apiKey:apiKey.trim(),clientId:clientId.trim()};
+    if (!validConfiguration(config)) throw new Error('Enter your Bungie API key and OAuth client ID.');
+    try { localStorage.setItem(SAVED,JSON.stringify(config)); }
+    catch { throw new Error('This browser could not save the app settings. Allow storage for this site and try again.'); }
+    return config;
+  }
+  function savedConfiguration() {
+    try {
+      const raw=localStorage.getItem(SAVED);
+      if (raw!==null) {
+        const saved=JSON.parse(raw);
+        return validConfiguration(saved) ? {apiKey:saved.apiKey,clientId:saved.clientId} : null;
+      }
+    } catch { return validConfiguration(configuration()) ? {apiKey:configuration().apiKey,clientId:configuration().clientId} : null; }
+    // Preserve credentials already entered before persistent settings were added.
+    const legacy=configuration();
+    if (!validConfiguration(legacy)) return null;
+    try { return saveConfiguration(legacy.apiKey,legacy.clientId); }
+    catch { return {apiKey:legacy.apiKey,clientId:legacy.clientId}; }
+  }
+  function forgetConfiguration() {
+    // The empty marker prevents another tab's legacy session from restoring it.
+    try { localStorage.setItem(SAVED,'null'); }
+    catch { throw new Error('This browser could not remove the saved app settings. Allow storage for this site and try again.'); }
+    disconnect();
+  }
   function connected() { const token=stored(TOKEN); return !!(token?.access_token && token.expiresAt > Date.now()+30000); }
   function disconnect() { [CONFIG,TOKEN,PENDING].forEach(key=>sessionStorage.removeItem(key)); }
   function callbackURL() { return new URL('bungie-auth.html',location.href).href.split(/[?#]/)[0]; }
   function begin(apiKey,clientId) {
-    if (!/^[A-Za-z0-9_-]{16,256}$/.test(apiKey) || !/^\d{1,12}$/.test(clientId)) throw new Error('Enter your Bungie API key and OAuth client ID.');
     if (location.protocol !== 'https:') throw new Error('Bungie sign-in needs the published HTTPS site. Local previews can use the sample scan.');
+    const saved=saveConfiguration(apiKey,clientId);
     const state = [...crypto.getRandomValues(new Uint8Array(32))].map(b=>b.toString(16).padStart(2,'0')).join('');
-    const config={apiKey,clientId,redirect:callbackURL()};
+    const config={...saved,redirect:callbackURL()};
+    sessionStorage.removeItem(TOKEN);
     sessionStorage.setItem(CONFIG,JSON.stringify(config));
     sessionStorage.setItem(PENDING,JSON.stringify({state,at:Date.now(),returnPage:location.pathname.endsWith('armor-vault.html')?'armor-vault.html':'weapon-vault.html'}));
     const url = new URL('/en/oauth/authorize',BASE);
-    url.search = new URLSearchParams({client_id:clientId,response_type:'code',state,redirect_uri:config.redirect});
+    url.search = new URLSearchParams({client_id:config.clientId,response_type:'code',state,redirect_uri:config.redirect});
     location.assign(url.href);
   }
   async function finish() {
@@ -111,5 +141,5 @@
     }
     return result;
   }
-  root.VaultBungie={configuration,connected,disconnect,callbackURL,begin,finish,memberships,client,definitions};
+  root.VaultBungie={configuration,savedConfiguration,saveConfiguration,forgetConfiguration,connected,disconnect,callbackURL,begin,finish,memberships,client,definitions};
 })(globalThis);

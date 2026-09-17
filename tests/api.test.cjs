@@ -1,13 +1,14 @@
 const test=require('node:test');const assert=require('node:assert/strict');const vm=require('node:vm');const fs=require('node:fs');const path=require('node:path');
 function harness(response={ErrorCode:1,Response:{}}){
-  const map=new Map(),calls=[],navigations=[];const sessionStorage={getItem:k=>map.get(k),setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};
-  const context={sessionStorage,URL,URLSearchParams,Date,AbortSignal,Uint8Array,Promise,crypto:require('node:crypto').webcrypto,
+  const map=new Map(),localMap=new Map(),calls=[],navigations=[];const sessionStorage={getItem:k=>map.get(k) ?? null,setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};
+  const localStorage={getItem:k=>localMap.get(k) ?? null,setItem:(k,v)=>localMap.set(k,v),removeItem:k=>localMap.delete(k)};
+  const context={sessionStorage,localStorage,URL,URLSearchParams,Date,AbortSignal,Uint8Array,Promise,crypto:require('node:crypto').webcrypto,
     setTimeout:f=>f(),location:{href:'https://example.test/vault/weapon-vault.html',protocol:'https:',pathname:'/vault/weapon-vault.html',search:'',assign:u=>navigations.push(u),replace:u=>navigations.push(u)},history:{replaceState:()=>{}},
     fetch:async(url,options)=>{calls.push({url,options});return {ok:true,status:200,json:async()=>typeof response==='function'?response(url):response};}};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../bungie-api.js'),'utf8'),context);
   map.set('vaultBungieConfig',JSON.stringify({apiKey:'TEST_KEY_NOT_A_CREDENTIAL',clientId:'123',redirect:'https://example.test/vault/bungie-auth.html'}));
   map.set('vaultBungieToken',JSON.stringify({access_token:'TEST_TOKEN_NOT_A_CREDENTIAL',expiresAt:Date.now()+3600000}));
-  return {api:context.VaultBungie,context,map,calls,navigations};
+  return {api:context.VaultBungie,context,map,localMap,calls,navigations};
 }
 test('public OAuth uses unpredictable state, exact callback, and no scope or secret query',()=>{
   const {api,map,navigations}=harness();api.begin('TEST_KEY_NOT_A_CREDENTIAL','123');const url=new URL(navigations[0]);
@@ -52,6 +53,62 @@ test('public manifest downloads contain no API key or bearer token',async()=>{
 test('an unexpected manifest host/path is rejected',async()=>{
   const {api,calls}=harness({ErrorCode:1,Response:{version:'test',jsonWorldComponentContentPaths:{en:{DestinyInventoryItemDefinition:'https://evil.example/items.json'}}}});
   await assert.rejects(api.definitions,/unexpected/);assert.equal(calls.length,1);
+});
+
+test('saved API key and client ID survive a new tab session without persisting sign-in tokens',()=>{
+  const {api,context,map,localMap}=harness();
+  api.saveConfiguration('  TEST_KEY_NOT_A_CREDENTIAL  ',' 123 ');
+  map.clear();
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../bungie-api.js'),'utf8'),context);
+  const restored=context.VaultBungie.savedConfiguration();
+  assert.equal(restored.apiKey,'TEST_KEY_NOT_A_CREDENTIAL');assert.equal(restored.clientId,'123');
+  assert.equal(context.VaultBungie.connected(),false);
+  assert.deepEqual([...localMap.keys()],['vaultBungieSavedConfig']);
+  assert.deepEqual(Object.keys(JSON.parse(localMap.get('vaultBungieSavedConfig'))).sort(),['apiKey','clientId']);
+});
+test('existing session credentials migrate automatically without copying the callback or token',()=>{
+  const {api,localMap}=harness();
+  assert.equal(api.savedConfiguration().clientId,'123');
+  const saved=JSON.parse(localMap.get('vaultBungieSavedConfig'));
+  assert.deepEqual(saved,{apiKey:'TEST_KEY_NOT_A_CREDENTIAL',clientId:'123'});
+});
+test('Connect saves settings, builds the current callback, and clears the old access token',()=>{
+  const {api,map,localMap,navigations}=harness();
+  api.begin('NEW_TEST_KEY_NOT_A_CREDENTIAL','456');
+  assert.equal(map.has('vaultBungieToken'),false);
+  assert.equal(JSON.parse(localMap.get('vaultBungieSavedConfig')).clientId,'456');
+  assert.equal(JSON.parse(map.get('vaultBungieConfig')).redirect,'https://example.test/vault/bungie-auth.html');
+  assert.equal(new URL(navigations[0]).searchParams.get('client_id'),'456');
+});
+test('saving different preferences does not mix them with the current authenticated client',async()=>{
+  const {api,calls}=harness();
+  api.saveConfiguration('NEW_TEST_KEY_NOT_A_CREDENTIAL','456');
+  await api.memberships();
+  assert.equal(calls[0].options.headers['X-API-Key'],'TEST_KEY_NOT_A_CREDENTIAL');
+  assert.equal(api.configuration().clientId,'123');assert.equal(api.savedConfiguration().clientId,'456');
+});
+test('Disconnect keeps saved settings; Forget removes them and prevents legacy migration from another tab',()=>{
+  const {api,map,localMap}=harness();api.savedConfiguration();
+  api.disconnect();assert.equal(api.connected(),false);assert.equal(api.savedConfiguration().clientId,'123');
+  api.forgetConfiguration();assert.equal(api.savedConfiguration(),null);
+  assert.equal(localMap.get('vaultBungieSavedConfig'),'null');
+  map.set('vaultBungieConfig',JSON.stringify({apiKey:'TEST_KEY_NOT_A_CREDENTIAL',clientId:'123'}));
+  assert.equal(api.savedConfiguration(),null);
+  api.saveConfiguration('NEW_TEST_KEY_NOT_A_CREDENTIAL','456');assert.equal(api.savedConfiguration().clientId,'456');
+});
+test('blocked browser storage reports the failure without navigating or invalidating an active session',()=>{
+  const {api,context,navigations}=harness();context.localStorage.setItem=()=>{throw new Error('Storage blocked');};
+  assert.throws(()=>api.saveConfiguration('TEST_KEY_NOT_A_CREDENTIAL','123'),/could not save/);
+  assert.throws(()=>api.begin('TEST_KEY_NOT_A_CREDENTIAL','123'),/could not save/);
+  assert.throws(()=>api.forgetConfiguration(),/could not remove/);
+  assert.equal(navigations.length,0);assert.equal(api.connected(),true);
+});
+test('invalid settings cannot overwrite a saved configuration',()=>{
+  const {api,localMap}=harness();api.saveConfiguration('TEST_KEY_NOT_A_CREDENTIAL','123');
+  const before=localMap.get('vaultBungieSavedConfig');
+  assert.throws(()=>api.saveConfiguration('short','123'),/Enter/);
+  assert.throws(()=>api.saveConfiguration('TEST_KEY_NOT_A_CREDENTIAL','not an ID'),/Enter/);
+  assert.equal(localMap.get('vaultBungieSavedConfig'),before);
 });
 
 function cacheHarness(initial={},paths={}) {

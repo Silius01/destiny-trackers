@@ -15,7 +15,11 @@ At <https://www.bungie.net/en/Application>, configure the application associated
 - Redirect URL: `https://silius01.github.io/destiny-trackers/bungie-auth.html`
 - Origin Header: `https://silius01.github.io`
 
-Enter that application's API key and OAuth client ID in the tracker and click **Connect Bungie**. Sign-in happens on Bungie. No client secret is used. Credentials and the access token are kept in `sessionStorage`, not committed or included in backups. Public OAuth clients do not receive refresh tokens; reconnect after expiry. Navigate between trackers in the same browser tab to reuse the session.
+Enter that application's API key and OAuth client ID in the tracker and click **Save settings** or **Connect Bungie**. Both actions remember the key and client ID in this browser's `localStorage` and automatically refill both vaults after reloads or reopening. Existing credentials in a tab's session are migrated when the connection form loads. Saved settings are never included in checklist backups or scan reports.
+
+Sign-in happens on Bungie. No client secret is used. OAuth access tokens and pending sign-in state remain in `sessionStorage`; they are not made persistent by saving the app settings. Public OAuth clients do not receive refresh tokens; reconnect with the prefilled settings after expiry. Navigate between trackers in the same browser tab to reuse the active session. Saving different app settings does not replace the credentials bound to an existing token; **Connect Bungie** starts a fresh sign-in using the new settings.
+
+**Disconnect** signs out of the current tab while keeping the saved API key and client ID. **Forget saved settings** removes the saved key and client ID and disconnects the current tab. Checklist progress is retained. Settings are specific to this browser and site; clearing its site data removes them.
 
 Local HTTP and `file:` previews can use **Try example scan**. Live OAuth needs the deployed HTTPS callback. Example mode cannot save checklist results or change locks.
 
@@ -75,6 +79,6 @@ Progress remains browser-local on GitHub Pages. Claude-specific database code is
 
 Run `npm test` with Node 20+. No npm packages are required. `node tests/browser/build-harness.cjs` generates ignored local browser fixtures with synthetic inventories and separate `qa-*` progress storage. Serve the directory locally, then open `tests/browser/generated-weapon.html` and `generated-armor.html`. Generated fixtures must not be deployed.
 
-Validation: 48 regression tests and local browser checks cover one-instance ranking, enhanced multi-perk Brass Attacks, missing-definition diagnostics, manifest cache invalidation, per-item selectable perks, armor base stats and duplicate grouping, keeper selection, migrations, account selection, OAuth state, exact IDs, lock ordering, save/reload, and failure paths. The synthetic armor browser flow verifies keeper selection, applying locks, and a follow-up scan with zero remaining changes. A live OAuth scan and real account lock changes require the owner's configured Bungie application and have not yet been verified.
+Validation: 55 regression tests and local browser checks cover saved settings, session migration, OAuth client isolation, one-instance ranking, enhanced multi-perk Brass Attacks, missing-definition diagnostics, manifest cache invalidation, per-item selectable perks, armor base stats and duplicate grouping, keeper selection, account selection, OAuth state, exact IDs, lock ordering, save/reload, and failure paths. The synthetic armor browser flow verifies keeper selection, applying locks, and a follow-up scan with zero remaining changes. A live OAuth scan and real account lock changes require the owner's configured Bungie application and have not yet been verified.
 
 References: [Bungie OAuth](https://github.com/Bungie-net/api/wiki/OAuth-Documentation), [Bungie API schema](https://github.com/Bungie-net/api/blob/master/openapi.json), and [DIM's public source](https://github.com/DestinyItemManager/DIM) for current socket/stat identifiers and vault lock character selection.
