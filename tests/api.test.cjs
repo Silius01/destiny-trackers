@@ -53,3 +53,40 @@ test('an unexpected manifest host/path is rejected',async()=>{
   const {api,calls}=harness({ErrorCode:1,Response:{version:'test',jsonWorldComponentContentPaths:{en:{DestinyInventoryItemDefinition:'https://evil.example/items.json'}}}});
   await assert.rejects(api.definitions,/unexpected/);assert.equal(calls.length,1);
 });
+
+function cacheHarness(initial={},paths={}) {
+  const contents=new Map(Object.entries(initial));
+  const tables={DestinyInventoryItemDefinition:'/common/destiny2_content/items-new.json',DestinyStatDefinition:'/common/destiny2_content/stats.json',...paths};
+  const h=harness(url=>url.endsWith('/Manifest/')?{ErrorCode:1,Response:{version:'unchanged-label',jsonWorldComponentContentPaths:{en:tables}}}:{fresh:true});
+  h.context.indexedDB={open:()=>{
+    const req={result:{close(){},transaction(){
+      const tx={objectStore:()=>({get:key=>{const r={result:contents.get(key)};queueMicrotask(()=>tx.oncomplete());return r;},put:(value,key)=>{contents.set(key,value);const r={result:key};queueMicrotask(()=>tx.oncomplete());return r;}})};
+      return tx;
+    }}};queueMicrotask(()=>req.onsuccess());return req;
+  }};
+  return {...h,contents};
+}
+test('changed content paths invalidate cached definitions even when the manifest version is unchanged',async()=>{
+  const {api,calls,contents}=cacheHarness({DestinyInventoryItemDefinition:{version:'unchanged-label',path:'/common/destiny2_content/items-old.json',data:{stale:true}}});
+  const result=await api.definitions();assert.equal(result.items.fresh,true);assert.equal(result.items.stale,undefined);
+  assert.ok(calls.some(c=>c.url.endsWith('/items-new.json')));assert.equal(contents.get('DestinyInventoryItemDefinition').path,'/common/destiny2_content/items-new.json');
+});
+test('unchanged content paths reuse cached data and legacy version-only caches are refreshed',async()=>{
+  for(const legacy of [false,true]){
+    const {api,calls}=cacheHarness({DestinyInventoryItemDefinition:{version:'unchanged-label',...(legacy?{}:{path:'/common/destiny2_content/items-new.json'}),data:{cached:true}}});
+    const result=await api.definitions();assert.equal(!!result.items.cached,!legacy);
+    assert.equal(calls.some(c=>c.url.endsWith('/items-new.json')),legacy);
+  }
+});
+test('explicit definition refresh bypasses IndexedDB and browser cache without sending credentials',async()=>{
+  const {api,calls}=cacheHarness({DestinyInventoryItemDefinition:{path:'/common/destiny2_content/items-new.json',data:{cached:true}}});
+  const result=await api.definitions(()=>{},{refresh:true});assert.equal(result.items.fresh,true);
+  const call=calls.find(c=>c.url.endsWith('/items-new.json'));
+  assert.equal(call.options.cache,'reload');assert.equal(call.options.headers,undefined);assert.equal(call.options.credentials,'omit');
+});
+test('cached data cannot bypass manifest path validation or resurrect a missing optional table',async()=>{
+  const bad=cacheHarness({DestinyInventoryItemDefinition:{version:'unchanged-label',data:{cached:true}}},{DestinyInventoryItemDefinition:'https://evil.example/items.json'});
+  await assert.rejects(bad.api.definitions,/unexpected/);assert.equal(bad.calls.length,1);
+  const optional=cacheHarness({DestinyEquipableItemSetDefinition:{version:'unchanged-label',data:{stale:true}}});
+  assert.equal(Object.keys((await optional.api.definitions()).sets).length,0);
+});

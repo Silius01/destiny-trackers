@@ -60,7 +60,7 @@
 
   function resolve(item, profile, defs) {
     const def = defs.items[item.itemHash];
-    if (!def || def.redacted) return {...item, kind:'unknown', name:'Unknown item', problem:'Missing item definition'};
+    if (!def || def.redacted) return {...item, kind:'unknown', name:'Unknown item '+item.itemHash, problem:'Missing item definition: '+item.itemHash,missingDefinitions:[item.itemHash]};
     const sockets = profile.itemComponents?.sockets?.data?.[item.id]?.sockets;
     const reusable = profile.itemComponents?.reusablePlugs?.data?.[item.id]?.plugs || {};
     const active = (sockets || []).filter(s=>s.plugHash && s.isEnabled !== false).map(s=>defs.items[s.plugHash]).filter(Boolean);
@@ -70,7 +70,8 @@
       signature:fingerprint(item,profile), className:CLASS[def.classType] || '', active,
       element:ELEMENT[profile.itemComponents?.instances?.data?.[item.id]?.damageType || def.defaultDamageType] || ''};
     if (!sockets && ['weapon','armor'].includes(kind)) return {...result,problem:'Socket data is missing'};
-    if ((sockets || []).some(s=>s.plugHash && !defs.items[s.plugHash])) return {...result,problem:'A socket definition is missing'};
+    const missingDefinitions=unique((sockets || []).filter(s=>s.plugHash && !defs.items[s.plugHash]).map(s=>s.plugHash));
+    if (missingDefinitions.length) return {...result,problem:'Socket definitions are missing: '+missingDefinitions.join(', '),missingDefinitions};
     if (kind === 'weapon') {
       const category = def.sockets?.socketCategories?.find(c=>c.socketCategoryHash === 4241085061);
       const indexes = (category?.socketIndexes || []).filter(index => {
@@ -82,7 +83,11 @@
         const current = sockets[index]?.plugHash;
         // Only instance-owned options. Never use randomizedPlugSetHash or a crafting recipe pool.
         const hashes = unique([current,...(reusable[index] || []).filter(p=>p.canInsert !== false && p.enabled !== false).map(p=>p.plugItemHash)].filter(Boolean));
-        if (hashes.some(hash=>!defs.items[hash])) result.problem = 'A selectable perk definition is missing';
+        const missing=hashes.filter(hash=>!defs.items[hash]);
+        if (missing.length) {
+          result.missingDefinitions=unique([...(result.missingDefinitions || []),...missing]);
+          result.problem='Selectable perk definitions are missing: '+result.missingDefinitions.join(', ');
+        }
         return hashes.map(hash=>defs.items[hash]).filter(Boolean).map(p=>p.displayProperties?.name).filter(Boolean);
       });
       if (result.columns.some(c=>!c.length)) result.problem = 'One or more perk columns could not be read';
@@ -159,13 +164,21 @@
     const groups = new Map(), review = [], patches = {}, armorMatches=[];
     const scannedAt = new Date(now).toISOString();
     for (const item of items) {
+      if (item.kind==='unknown') { review.push({...item,reason:item.problem});continue; }
       if (item.kind !== catalog.kind) continue;
       if (item.problem) { review.push({...item,reason:item.problem}); continue; }
       if (catalog.kind === 'weapon') {
         const options = weaponOptions(item,catalog.weapons);
         const mapped = mappings[item.itemHash];
         const weapon = mapped !== undefined ? options.find(w=>String(w.id) === String(mapped)) : options.length === 1 ? options[0] : null;
-        if (!weapon) { review.push({...item,reason:options.length ? 'Choose the matching catalog version' : 'Not in this weapon catalog',options}); continue; }
+        if (!weapon) {
+          const named=catalog.weapons.filter(w=>weaponName(w.name)===weaponName(item.name));
+          const sameElement=named.filter(w=>norm(w.element)===norm(item.element));
+          const reason=options.length ? (mapped!==undefined?'Saved catalog match is no longer valid; choose the matching version':'Choose the matching catalog version') :
+            sameElement.length ? 'Origin trait mismatch: Bungie reports '+(item.origin.join(' / ') || 'none')+'; catalog expects '+unique(sameElement.map(w=>w.origin || 'none')).join(' / ') :
+            named.length ? 'Damage type mismatch: Bungie reports '+(item.element || 'unknown')+'; catalog expects '+unique(named.map(w=>w.element)).join(' / ') : 'Not in this weapon catalog';
+          review.push({...item,reason,options});continue;
+        }
         if (!Array.isArray(weapon.rollCols) || weapon.rollCols.length !== 4 || weapon.rollCols.some(c=>!c.length)) {
           review.push({...item,reason:'Catalog recommendation is incomplete'}); continue;
         }
@@ -236,6 +249,23 @@
       const duplicates=g.copies.filter(i=>i.id!==keeper.id);
       return {groupId:g.groupId,recordId:g.recordId,name:keeper.name,keeper,
         locks:keeper.locked ? [] : [keeper],unlocks:duplicates.filter(i=>i.locked),duplicates,copies:g.copies};
+    });
+  }
+
+  function weaponDiagnostics(result, profile, defs) {
+    const ranked=new Map(result.weapons.flatMap(g=>g.copies.map(i=>[i.id,{item:i,group:g}])));
+    const review=new Map(result.review.map(i=>[i.id,i.reason]));
+    return result.items.filter(i=>i.kind==='weapon' || i.kind==='unknown').map(item=>{
+      const match=ranked.get(item.id),sockets=profile.itemComponents?.sockets?.data?.[item.id]?.sockets || [];
+      const reusable=profile.itemComponents?.reusablePlugs?.data?.[item.id]?.plugs || {};
+      const plug=hash=>({hash,name:defs.items[hash]?.displayProperties?.name || null,category:defs.items[hash]?.plug?.plugCategoryHash});
+      return {instanceId:item.id,itemHash:item.itemHash,name:item.name,location:item.location,locked:item.locked,
+        element:item.element,origin:item.origin,frame:item.frame,columns:item.columns,focusStats:item.focusStats,
+        catalogId:match?.group.recordId,tier:match?.item.tier,keeper:match?.group.winner.id,matchedPerks:match?.item.perks,
+        reason:review.get(item.id) || null,missingDefinitions:item.missingDefinitions || [],
+        socketCategories:item.def?.sockets?.socketCategories,
+        sockets:sockets.map((socket,index)=>({index,current:plug(socket.plugHash),isEnabled:socket.isEnabled,isVisible:socket.isVisible,
+          options:(reusable[index] || []).map(p=>({...plug(p.plugItemHash),enabled:p.enabled,canInsert:p.canInsert}))}))};
     });
   }
 
@@ -318,5 +348,5 @@
     }
     return next;
   }
-  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,scan,lockPlan,validatePlan,executeLocks,weaponRecord,applyRecords};
+  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,scan,lockPlan,validatePlan,executeLocks,weaponRecord,applyRecords,weaponDiagnostics};
 });

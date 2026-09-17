@@ -9,7 +9,7 @@ for(const kind of ['weapon','armor']){
 }
 fs.writeFileSync(path.join(__dirname,'mock-runtime.js'),`
 let fixture;
-function sample(){if(!fixture)fixture=VaultScanExample(location.pathname.includes('armor')?{kind:'armor',sets:SETS,combos:COMBOS,archetypes:ARCHETYPES}:{kind:'weapon',weapons:WEAPONS});return fixture;}
+function sample(){if(!fixture){const params=new URLSearchParams(location.search);fixture=VaultScanExample(location.pathname.includes('armor')?{kind:'armor',sets:SETS,combos:COMBOS,archetypes:ARCHETYPES}:{kind:'weapon',weapons:params.get('weapon')==='brass'?WEAPONS.filter(w=>w.name==='Brass Attacks'):WEAPONS});if(params.has('missing')){const socket=fixture.profile.itemComponents.sockets.data['900719925474099103'].sockets[2];delete fixture.defs.items[socket.plugHash];}}return fixture;}
 VaultBungie.connected=()=>true;
 VaultBungie.memberships=async()=>[{membershipType:3,membershipId:'1234567890123456789',displayName:'Synthetic QA inventory'}];
 VaultBungie.definitions=async()=>sample().defs;

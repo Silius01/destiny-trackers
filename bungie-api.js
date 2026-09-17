@@ -89,23 +89,25 @@
       });
     } catch { return undefined; } finally { db?.close(); }
   }
-  async function definitions(progress=()=>{}) {
+  async function definitions(progress=()=>{}, {refresh=false}={}) {
     progress('Checking Bungie item definitions…');
     const manifest=await api('/Destiny2/Manifest/');
     const tables={items:'DestinyInventoryItemDefinition',stats:'DestinyStatDefinition',sets:'DestinyEquipableItemSetDefinition'};
     const result={};
     for (const [name,table] of Object.entries(tables)) {
-      const key=table; const previous=await cached(key);
-      if (previous?.version===manifest.version) { result[name]=previous.data;continue; }
       const path=manifest.jsonWorldComponentContentPaths?.en?.[table];
       if (name==='sets' && !path) { result[name]={};continue; }
       if (typeof path!=='string' || !path.startsWith('/common/destiny2_content/') || path.startsWith('//')) throw new Error('Bungie returned an unexpected definition path.');
+      // Bungie can replace a table without changing the manifest version label.
+      // The actual content path must match before an IndexedDB table is reused.
+      const key=table; const previous=refresh ? undefined : await cached(key);
+      if (previous?.path===path && previous.data) { result[name]=previous.data;continue; }
       progress('Downloading '+(name==='items'?'item definitions (first scan can take a minute)':name+' definitions')+'…');
       // Public definitions do not receive the API key or OAuth token.
-      const response=await fetch(BASE+path,{credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(180000)});
+      const response=await fetch(BASE+path,{credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',...(refresh?{cache:'reload'}:{}),signal:AbortSignal.timeout(180000)});
       if (!response.ok) throw new Error('Could not download Bungie definitions. Try again.');
       result[name]=await response.json();
-      await cached(key,{version:manifest.version,data:result[name]});
+      await cached(key,{path,version:manifest.version,data:result[name]});
     }
     return result;
   }

@@ -19,6 +19,12 @@ Enter that application's API key and OAuth client ID in the tracker and click **
 
 Local HTTP and `file:` previews can use **Try example scan**. Live OAuth needs the deployed HTTPS callback. Example mode cannot save checklist results or change locks.
 
+### Troubleshooting a missed weapon
+
+Use **Refresh definitions & scan** to redownload Bungie's item definitions and scan again. Cached tables are matched against their current content paths; a changed file is refreshed even if Bungie's manifest version label stays the same. If a definition download takes a while, the scanner refreshes the inventory snapshot before grading it.
+
+The **Review** section identifies missing item/perk hashes, origin or damage-type mismatches, and stale catalog mappings. Missing item definitions are listed rather than silently omitted. **Export scan report** includes the actual per-copy perk names, socket indexes, selectable-option flags, catalog match, and keeper decisions. **Export last scan report** remains available after applying locks or an operation failure, with its result and any completed lock changes. Reports contain inventory details but never your API key or OAuth token.
+
 ## Weapon evaluation
 
 Each physical item is identified by its 64-bit instance ID, kept as a string. Selectable perks from that instance count; the definition's potential random-roll or crafting pools do not.
@@ -69,6 +75,6 @@ Progress remains browser-local on GitHub Pages. Claude-specific database code is
 
 Run `npm test` with Node 20+. No npm packages are required. `node tests/browser/build-harness.cjs` generates ignored local browser fixtures with synthetic inventories and separate `qa-*` progress storage. Serve the directory locally, then open `tests/browser/generated-weapon.html` and `generated-armor.html`. Generated fixtures must not be deployed.
 
-Validation: 39 regression tests and local browser checks cover one-instance ranking, per-item selectable perks, armor base stats and duplicate grouping, keeper selection, migrations, account selection, OAuth state, exact IDs, lock ordering, save/reload, and failure paths. The synthetic armor browser flow verifies keeper selection, applying locks, and a follow-up scan with zero remaining changes. A live OAuth scan and real account lock changes require the owner's configured Bungie application and have not yet been verified.
+Validation: 48 regression tests and local browser checks cover one-instance ranking, enhanced multi-perk Brass Attacks, missing-definition diagnostics, manifest cache invalidation, per-item selectable perks, armor base stats and duplicate grouping, keeper selection, migrations, account selection, OAuth state, exact IDs, lock ordering, save/reload, and failure paths. The synthetic armor browser flow verifies keeper selection, applying locks, and a follow-up scan with zero remaining changes. A live OAuth scan and real account lock changes require the owner's configured Bungie application and have not yet been verified.
 
 References: [Bungie OAuth](https://github.com/Bungie-net/api/wiki/OAuth-Documentation), [Bungie API schema](https://github.com/Bungie-net/api/blob/master/openapi.json), and [DIM's public source](https://github.com/DestinyItemManager/DIM) for current socket/stat identifiers and vault lock character selection.

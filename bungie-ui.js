@@ -6,7 +6,7 @@
   const count=(n,one,many=one+'s')=>n+' '+(n===1?one:many);
   function mount(adapter){
     const kind=adapter.catalog.kind,api=VaultBungie,core=VaultScanCore,key=adapter.storageKey;
-    let profile,defs,result,client,accounts=[],busy=false,demo=false,keepers={};
+    let profile,defs,result,client,accounts=[],busy=false,demo=false,keepers={},lastReport=null;
     let mappings=read('vaultBungieMappings-'+kind,{});
     const dialog=h('dialog',undefined,'bungie-dialog');
     const header=h('header');header.append(h('h2',kind==='weapon'?'Scan weapons':'Scan armor'),button('Close',()=>dialog.close()));
@@ -29,18 +29,20 @@
     const controls=h('div',undefined,'scan-actions'),accountSelect=h('select');accountSelect.setAttribute('aria-label','Destiny account');
     accountSelect.addEventListener('change',()=>{result=null;report.replaceChildren();client=api.client(accounts[Number(accountSelect.value)]);updateButtons();});
     const scanButton=button('Scan vault + characters',()=>run(scanLive),'primary');
+    const refreshButton=button('Refresh definitions & scan',()=>run(()=>scanLive(true)));
     const sampleButton=button('Try example scan',()=>run(scanSample));
-    controls.append(accountSelect,scanButton,sampleButton);body.append(controls);
+    controls.append(accountSelect,scanButton,refreshButton,sampleButton);body.append(controls);
     const statusBox=h('div','Connect Bungie to scan your inventory, or try an example.', 'scan-status');statusBox.setAttribute('role','status');statusBox.setAttribute('aria-live','polite');body.append(statusBox);
     const report=h('div');body.append(report);
     const backups=h('div',undefined,'scan-actions');
+    const exportLast=button('Export last scan report',()=>{if(lastReport)download(lastReport,kind+'-scan-report.json');});exportLast.disabled=true;
     backups.append(button('Export checklist backup',()=>download({format:'destiny-vault-backup',version:1,kind,at:new Date().toISOString(),records:adapter.getRecords()},kind+'-vault-backup.json')),
-      button('Restore before last scan',()=>run(async()=>{const data=read(key+'-before-scan',null);if(!data?.records)throw new Error('There is no saved pre-scan backup.');await adapter.replaceRecords(data.records);status('Restored the checklist from before the last scan. Game locks are unchanged.');})));body.append(backups);
+      button('Restore before last scan',()=>run(async()=>{const data=read(key+'-before-scan',null);if(!data?.records)throw new Error('There is no saved pre-scan backup.');await adapter.replaceRecords(data.records);status('Restored the checklist from before the last scan. Game locks are unchanged.');})),exportLast);body.append(backups);
     const how=h('details');how.append(h('summary','How matching and ranking work'),h('p',kind==='weapon'?
       'God: all four recommended columns plus the priority stat on one copy. Good: recommended column 3 and 4 on one copy. Basic: an owned copy below those requirements. Ties use matching main perks, total matching columns, priority stat, community popularity, existing lock, then Power. Craftable options you have not crafted are never counted. Different catalog versions require a clear match.' :
       'Only base armor stats determine the tertiary stat. Each physical item contributes its own combination. A set/slot/archetype is fully farmed when all four tertiary variants are tracked. Duplicate groups require the same piece, class, archetype, tertiary, gear tier, and Artifice status. The suggested keeper has the highest base-stat total; ties prefer an existing lock, then Power. Choose another copy in the preview if its stat distribution suits your build. Exotic entries track ownership and have no automatic lock plan.'),h('p','Scans update matched entries and preserve earlier manual marks. A rescan replaces the previous scan’s contribution. Unrecognized items remain in the review list.'));body.append(how);
     function status(message,error=false){statusBox.textContent=message;statusBox.classList.toggle('error',error);}
-    function updateButtons(){scanButton.disabled=busy || !api.connected();sampleButton.disabled=busy;accountSelect.disabled=busy;body.querySelectorAll('[data-apply]').forEach(b=>b.disabled=busy || demo || b.dataset.empty==='true');body.querySelectorAll('select, [data-edit], .scan-fields input').forEach(b=>b.disabled=busy || b.dataset.unavailable==='true');connActions.querySelectorAll('button').forEach(b=>b.disabled=busy);}
+    function updateButtons(){scanButton.disabled=refreshButton.disabled=busy || !api.connected();sampleButton.disabled=busy;accountSelect.disabled=busy;exportLast.disabled=busy || !lastReport;body.querySelectorAll('[data-apply]').forEach(b=>b.disabled=busy || demo || b.dataset.empty==='true');body.querySelectorAll('select, [data-edit], .scan-fields input').forEach(b=>b.disabled=busy || b.dataset.unavailable==='true');connActions.querySelectorAll('button').forEach(b=>b.disabled=busy);}
     async function run(action){if(busy)return;busy=true;updateButtons();try{await action();}catch(e){status(e.message || 'The scan could not finish.',true);}finally{busy=false;updateButtons();}}
     async function refreshConnection(){
       connection.open=!api.connected();accountSelect.hidden=!api.connected();updateButtons();
@@ -48,11 +50,15 @@
         accounts.forEach((a,n)=>{const o=h('option',(a.bungieGlobalDisplayName || a.displayName || 'Guardian')+' · '+({1:'Xbox',2:'PlayStation',3:'Steam',6:'Epic'}[a.membershipType]));o.value=String(n);accountSelect.append(o);});
         client=api.client(accounts[0]);status('Connected. Ready to scan the vault and all characters.');});}
     }
-    async function scanLive(){
+    async function scanLive(refresh=false){
       demo=false;result=null;report.replaceChildren();
       if(!client){accounts=await api.memberships();if(accounts.length!==1)throw new Error('Select your Destiny account before scanning.');client=api.client(accounts[0]);}
       status('Reading your vault and every character…');profile=await client.profile();
-      core.inventory(profile);defs=await api.definitions(status);analyze();
+      core.inventory(profile);defs=await api.definitions(status,{refresh});
+      // A first manifest download can outlast the freshness window. Grade a new
+      // inventory snapshot after the download instead of failing on the old one.
+      if(Date.now()-Date.parse(profile.responseMintedTimestamp)>60000){status('Refreshing inventory after the definition download…');profile=await client.profile();}
+      analyze();
     }
     async function scanSample(){
       demo=true;const sample=root.VaultScanExample(adapter.catalog);profile=sample.profile;defs=sample.defs;analyze();
@@ -99,7 +105,8 @@
         if(exotics.length){const details=h('details');details.append(h('summary',exotics.length+' exotic copies · ownership only'));for(const copy of exotics)details.append(h('p',copy.name+' · '+copy.className+' · '+copy.location+' · '+copy.id),h('small','No automatic exotic lock changes'));report.append(details);}
       }
       if(result.review.length){const review=h('details');review.append(h('summary','Review '+result.review.length+' unmatched or ambiguous copies'));
-        const seen=new Set();for(const item of result.review){if(seen.has(item.itemHash))continue;seen.add(item.itemHash);const row=h('div',undefined,'scan-item');row.append(h('b',item.name),h('small',item.reason+' · item '+item.itemHash));
+        const seen=new Set();for(const item of result.review){const reviewKey=item.itemHash+':'+item.reason;if(seen.has(reviewKey))continue;seen.add(reviewKey);const row=h('div',undefined,'scan-item');row.append(h('b',item.name),h('small',item.reason+' · item '+item.itemHash),h('small','Instance '+item.id+' · '+item.location));
+          if(item.kind==='weapon'){row.append(h('small','Origin read: '+(item.origin?.join(' / ') || 'not available')));item.columns?.forEach((col,index)=>row.append(h('small','Column '+(index+1)+': '+col.join(' / '))));}
           const options=item.options?.map(w=>({value:String(w.id),text:w.name+' · '+w.element+' · '+w.source+' · '+w.archetype+' · catalog '+w.id})) || item.setOptions?.map(s=>({value:s.name,text:s.name}));
           if(options?.length){const select=h('select');select.setAttribute('aria-label','Catalog match for '+item.name);const empty=h('option','Choose a catalog match…');empty.value='';select.append(empty);for(const option of options){const o=h('option',option.text);o.value=option.value;select.append(o);}select.addEventListener('change',()=>{if(!select.value)return;mappings={...mappings,[item.itemHash]:select.value};localStorage.setItem('vaultBungieMappings-'+kind,JSON.stringify(mappings));analyze();});row.append(select);}review.append(row);
         }report.append(review);}
@@ -113,14 +120,17 @@
           backup();status('Rechecking inventory and locking the selected copies…');
           // Clear the preview even after partial failure. A new scan is required to retry.
           const current=result;
-          try{await core.executeLocks(plan,client,current,done=>status(done.length+' lock changes applied…'));await saveScan(false,true);status('Checklist saved. Keeper locks and duplicate unlocks verified.');}
+          try{await core.executeLocks(plan,client,current,done=>status(done.length+' lock changes applied…'));await saveScan(false,true);lastReport.lockResult={status:'verified'};status('Checklist saved. Keeper locks and duplicate unlocks verified.');}
+          catch(error){lastReport.lockResult={status:'failed',message:error.message,completed:error.completed || []};throw error;}
           finally{result=null;report.replaceChildren();}
         }),'primary');apply.dataset.apply='';apply.dataset.empty=String(changes===0);actions.append(apply);
       }
-      actions.append(button('Export scan report',()=>download({version:1,kind,at:result.scannedAt,account:result.account,
+      lastReport={version:2,kind,at:result.scannedAt,account:result.account,
         weapons:result.weapons.map(g=>({catalogId:g.recordId,keeper:g.winner.id,tier:g.winner.tier,perks:g.winner.perks,duplicates:g.copies.slice(1).map(i=>i.id)})),
         armor:result.armorMatches.map(i=>({instanceId:i.id,recordId:i.recordId,itemHash:i.itemHash,className:i.className,archetype:i.archetype,tertiary:i.tertiary,gearTier:i.gearTier,artifice:i.artifice,baseStats:i.baseStats,location:i.location,locked:i.locked,lockIssue:i.lockIssue})),
-        lockPlan:plan.map(g=>({groupId:g.groupId,keeper:g.keeper.id,locks:g.locks.map(i=>i.id),unlocks:g.unlocks.map(i=>i.id),duplicates:g.duplicates.map(i=>i.id)})),review:result.review.map(i=>({instanceId:i.id,name:i.name,reason:i.reason}))},kind+'-scan-report.json')));report.append(actions);
+        ...(kind==='weapon'?{weaponCopies:core.weaponDiagnostics(result,profile,defs)}:{}),
+        lockPlan:plan.map(g=>({groupId:g.groupId,keeper:g.keeper.id,locks:g.locks.map(i=>i.id),unlocks:g.unlocks.map(i=>i.id),duplicates:g.duplicates.map(i=>i.id)})),review:result.review.map(i=>({instanceId:i.id,itemHash:i.itemHash,name:i.name,reason:i.reason}))};
+      actions.append(button('Export scan report',()=>download(lastReport,kind+'-scan-report.json')));report.append(actions);
       updateButtons();
     }
     function backup(){localStorage.setItem(key+'-before-scan',JSON.stringify({at:new Date().toISOString(),records:adapter.getRecords()}));}
