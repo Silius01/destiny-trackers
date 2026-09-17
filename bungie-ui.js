@@ -3,9 +3,10 @@
   const h=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const button=(text,action,cls)=>{const b=h('button',text,cls);b.type='button';b.addEventListener('click',action);return b;};
   const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)) || fallback;}catch{return fallback;}};
+  const count=(n,one,many=one+'s')=>n+' '+(n===1?one:many);
   function mount(adapter){
     const kind=adapter.catalog.kind,api=VaultBungie,core=VaultScanCore,key=adapter.storageKey;
-    let profile,defs,result,client,accounts=[],busy=false,demo=false;
+    let profile,defs,result,client,accounts=[],busy=false,demo=false,keepers={};
     let mappings=read('vaultBungieMappings-'+kind,{});
     const dialog=h('dialog',undefined,'bungie-dialog');
     const header=h('header');header.append(h('h2',kind==='weapon'?'Scan weapons':'Scan armor'),button('Close',()=>dialog.close()));
@@ -37,9 +38,9 @@
       button('Restore before last scan',()=>run(async()=>{const data=read(key+'-before-scan',null);if(!data?.records)throw new Error('There is no saved pre-scan backup.');await adapter.replaceRecords(data.records);status('Restored the checklist from before the last scan. Game locks are unchanged.');})));body.append(backups);
     const how=h('details');how.append(h('summary','How matching and ranking work'),h('p',kind==='weapon'?
       'God: all four recommended columns plus the priority stat on one copy. Good: recommended column 3 and 4 on one copy. Basic: an owned copy below those requirements. Ties use matching main perks, total matching columns, priority stat, community popularity, existing lock, then Power. Craftable options you have not crafted are never counted. Different catalog versions require a clear match.' :
-      'Only base armor stats determine the tertiary stat. Each physical item contributes its own combination. A set/slot/archetype is fully farmed when all four tertiary variants are tracked. Exotic entries track ownership. Armor scans do not change armor locks.'),h('p','Scans update matched entries and preserve earlier manual marks. A rescan replaces the previous scan’s contribution. Unrecognized items remain in the review list.'));body.append(how);
+      'Only base armor stats determine the tertiary stat. Each physical item contributes its own combination. A set/slot/archetype is fully farmed when all four tertiary variants are tracked. Duplicate groups require the same piece, class, archetype, tertiary, gear tier, and Artifice status. The suggested keeper has the highest base-stat total; ties prefer an existing lock, then Power. Choose another copy in the preview if its stat distribution suits your build. Exotic entries track ownership and have no automatic lock plan.'),h('p','Scans update matched entries and preserve earlier manual marks. A rescan replaces the previous scan’s contribution. Unrecognized items remain in the review list.'));body.append(how);
     function status(message,error=false){statusBox.textContent=message;statusBox.classList.toggle('error',error);}
-    function updateButtons(){scanButton.disabled=busy || !api.connected();sampleButton.disabled=busy;accountSelect.disabled=busy;body.querySelectorAll('[data-apply]').forEach(b=>b.disabled=busy || demo);}
+    function updateButtons(){scanButton.disabled=busy || !api.connected();sampleButton.disabled=busy;accountSelect.disabled=busy;body.querySelectorAll('[data-apply]').forEach(b=>b.disabled=busy || demo || b.dataset.empty==='true');body.querySelectorAll('select, [data-edit], .scan-fields input').forEach(b=>b.disabled=busy || b.dataset.unavailable==='true');connActions.querySelectorAll('button').forEach(b=>b.disabled=busy);}
     async function run(action){if(busy)return;busy=true;updateButtons();try{await action();}catch(e){status(e.message || 'The scan could not finish.',true);}finally{busy=false;updateButtons();}}
     async function refreshConnection(){
       connection.open=!api.connected();accountSelect.hidden=!api.connected();updateButtons();
@@ -56,10 +57,10 @@
     async function scanSample(){
       demo=true;const sample=root.VaultScanExample(adapter.catalog);profile=sample.profile;defs=sample.defs;analyze();
     }
-    function analyze(){result=core.scan(profile,defs,adapter.catalog,mappings);render();status(demo?'Example only — this cannot save to your checklist or change game locks.':'Scan complete. Review the copies and proposed changes below.');}
+    function analyze(){keepers={};result=core.scan(profile,defs,adapter.catalog,mappings);render();status(demo?'Example only — this cannot save to your checklist or change game locks.':'Scan complete. Review the copies and proposed changes below.');}
     function stat(value,label){const box=h('div',undefined,'scan-stat');box.append(h('b',String(value)),h('small',label));return box;}
     function render(){
-      report.replaceChildren();const plan=core.lockPlan(result);
+      report.replaceChildren();const plan=core.lockPlan(result,keepers);
       const stats=h('div',undefined,'scan-stats');stats.append(stat(result.items.filter(i=>i.kind===kind).length,'copies checked'),stat(Object.keys(result.patches).length,'checklist entries matched'),stat(result.review.length,'copies needing review'));report.append(stats);
       if(kind==='weapon'){
         report.append(h('h3','Best copy for each tracked weapon'));
@@ -74,9 +75,28 @@
           tr.append(name,tier,perks,dup);tbody.append(tr);
         }wrap.append(table);report.append(wrap);
       }else{
-        report.append(h('h3','Armor combinations found'));
-        const grouped=new Map();for(const item of result.armorMatches){if(!grouped.has(item.recordId))grouped.set(item.recordId,[]);grouped.get(item.recordId).push(item);}
-        for(const [recordId,copies]of grouped){const row=h('div',undefined,'scan-item');row.append(h('b',recordId.replaceAll('/',' · ')),h('small',[...new Set(copies.map(i=>i.tertiary).filter(Boolean))].join(' / ') || 'Owned exotic'),h('small',copies.map(i=>i.className+' · '+i.location+' · '+i.id).join('; ')));report.append(row);}
+        report.append(h('h3','Keep one copy of each armor combination'),h('p','Different pieces, classes, archetypes, tertiary stats, gear tiers, and Artifice versions stay separate. Suggested keepers use the highest base-stat total. Choose a different copy below if you prefer its distribution.'));
+        const statsText=copy=>Object.entries(copy.baseStats).filter(([,value])=>value>0).map(([stat,value])=>stat+' '+value).join(' · ');
+        const copyText=copy=>copy.baseTotal+' base total · '+statsText(copy)+' · '+copy.power+' Power · '+copy.location+' · '+(copy.locked?'locked':'unlocked')+' · '+copy.id;
+        for(const group of result.armor){
+          const action=plan.find(p=>p.groupId===group.groupId),keeper=action?.keeper || group.winner;
+          const row=h('div',undefined,'scan-item');
+          const combo=keeper.className+' · '+keeper.slot+' · '+keeper.archetype+' / '+keeper.tertiary+' · '+(keeper.gearTier?'Tier '+keeper.gearTier:'Unknown tier')+(keeper.artifice?' · Artifice':'');
+          row.append(h('b',keeper.name),h('small',combo));
+          if(group.copies.length>1 && action){
+            const label=h('label','Copy to keep locked'),select=h('select');select.setAttribute('aria-label','Copy to keep: '+keeper.name+' · '+combo);
+            for(const copy of group.copies){const option=h('option',copyText(copy)+(copy.id===group.winner.id?' · suggested':''));option.value=copy.id;select.append(option);}select.value=keeper.id;
+            select.addEventListener('change',()=>{keepers[group.groupId]=select.value;render();const replacement=[...report.querySelectorAll('select')].find(s=>s.getAttribute('aria-label')===select.getAttribute('aria-label'));replacement?.focus({preventScroll:true});});label.append(select);row.append(label);
+          }
+          row.append(h('small',(action?'Keep locked: ':'Suggested copy: ')+copyText(keeper)));
+          if(!action)row.append(h('small','Lock changes paused: '+(group.copies.find(i=>i.lockIssue)?.lockIssue || 'another copy of this piece needs review'),'scan-warning'));
+          const duplicates=group.copies.filter(i=>i.id!==keeper.id);
+          if(duplicates.length){const details=h('details');details.append(h('summary',duplicates.length+' duplicate'+(duplicates.length===1?'':'s')+(action?' · '+action.unlocks.length+' to unlock':' · review required')));for(const copy of duplicates)details.append(h('p',copyText(copy)),h('small',!action?'Lock unchanged':copy.locked?'Will unlock':'Already unlocked'));row.append(details);}
+          else row.append(h('small','Only copy of this combination'));
+          report.append(row);
+        }
+        const exotics=result.armorMatches.filter(i=>i.exotic);
+        if(exotics.length){const details=h('details');details.append(h('summary',exotics.length+' exotic copies · ownership only'));for(const copy of exotics)details.append(h('p',copy.name+' · '+copy.className+' · '+copy.location+' · '+copy.id),h('small','No automatic exotic lock changes'));report.append(details);}
       }
       if(result.review.length){const review=h('details');review.append(h('summary','Review '+result.review.length+' unmatched or ambiguous copies'));
         const seen=new Set();for(const item of result.review){if(seen.has(item.itemHash))continue;seen.add(item.itemHash);const row=h('div',undefined,'scan-item');row.append(h('b',item.name),h('small',item.reason+' · item '+item.itemHash));
@@ -85,21 +105,22 @@
         }report.append(review);}
       const actions=h('div',undefined,'scan-actions');
       const save=button('Save scan to checklist',()=>run(saveScan),'primary');save.dataset.apply='';actions.append(save);
-      if(kind==='weapon'){
+      {
         const changes=plan.reduce((n,g)=>n+g.locks.length+g.unlocks.length,0);
-        report.append(h('p','Lock plan: '+plan.reduce((n,g)=>n+g.locks.length,0)+' best copies to lock; '+plan.reduce((n,g)=>n+g.unlocks.length,0)+' duplicates to unlock. Unlocking allows manual dismantling in game.'));
-        const apply=button('Save scan & apply '+changes+' lock changes',()=>run(async()=>{
+        report.append(h('p','Lock plan: '+count(plan.reduce((n,g)=>n+g.locks.length,0),'selected copy','selected copies')+' to lock; '+count(plan.reduce((n,g)=>n+g.unlocks.length,0),'duplicate')+' to unlock. Each keeper is locked and verified before its duplicates are unlocked. Unlocking allows manual dismantling in game.'));
+        const apply=button('Save scan & apply '+count(changes,'lock change'),()=>run(async()=>{
           if(!result || demo)throw new Error('Run a live scan first.');
           backup();status('Rechecking inventory and locking the selected copies…');
           // Clear the preview even after partial failure. A new scan is required to retry.
           const current=result;
           try{await core.executeLocks(plan,client,current,done=>status(done.length+' lock changes applied…'));await saveScan(false,true);status('Checklist saved. Keeper locks and duplicate unlocks verified.');}
           finally{result=null;report.replaceChildren();}
-        }),'primary');apply.dataset.apply='';actions.append(apply);
+        }),'primary');apply.dataset.apply='';apply.dataset.empty=String(changes===0);actions.append(apply);
       }
       actions.append(button('Export scan report',()=>download({version:1,kind,at:result.scannedAt,account:result.account,
         weapons:result.weapons.map(g=>({catalogId:g.recordId,keeper:g.winner.id,tier:g.winner.tier,perks:g.winner.perks,duplicates:g.copies.slice(1).map(i=>i.id)})),
-        armor:result.armorMatches.map(i=>({instanceId:i.id,recordId:i.recordId,tertiary:i.tertiary})),review:result.review.map(i=>({instanceId:i.id,name:i.name,reason:i.reason}))},kind+'-scan-report.json')));report.append(actions);
+        armor:result.armorMatches.map(i=>({instanceId:i.id,recordId:i.recordId,itemHash:i.itemHash,className:i.className,archetype:i.archetype,tertiary:i.tertiary,gearTier:i.gearTier,artifice:i.artifice,baseStats:i.baseStats,location:i.location,locked:i.locked,lockIssue:i.lockIssue})),
+        lockPlan:plan.map(g=>({groupId:g.groupId,keeper:g.keeper.id,locks:g.locks.map(i=>i.id),unlocks:g.unlocks.map(i=>i.id),duplicates:g.duplicates.map(i=>i.id)})),review:result.review.map(i=>({instanceId:i.id,name:i.name,reason:i.reason}))},kind+'-scan-report.json')));report.append(actions);
       updateButtons();
     }
     function backup(){localStorage.setItem(key+'-before-scan',JSON.stringify({at:new Date().toISOString(),records:adapter.getRecords()}));}

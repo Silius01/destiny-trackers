@@ -28,13 +28,13 @@
       const statHashes={Weapons:2996146975,Health:392767087,Class:1943323491,Grenade:1735777505,Super:144602215,Melee:4244567218};
       defs.sets[222]={displayProperties:{name:set.name}};
       defs.items[333]={itemType:2,displayProperties:{name:set.name+' Helmet'},classType:0,inventory:{bucketTypeHash:3448274439,tierType:5},equippingBlock:{equipableItemSetHash:222}};
-      arch.tertiaryOptions.slice(0,2).forEach((stat,n)=>{
+      [arch.tertiaryOptions[0],arch.tertiaryOptions[1],arch.tertiaryOptions[0]].forEach((stat,n)=>{
         const instance='900719925474098'+String(101+n);
-        const statPlug=plug('Base stats',748854354,[{statTypeHash:statHashes[arch.primary],value:30},{statTypeHash:statHashes[arch.secondary],value:25},{statTypeHash:statHashes[stat],value:20}]);
+        const statPlug=plug('Base stats',748854354,[{statTypeHash:statHashes[arch.primary],value:n===2?35:30},{statTypeHash:statHashes[arch.secondary],value:25},{statTypeHash:statHashes[stat],value:20}]);
         const archetypePlug=plug(arch.name,778194869);
         profile.itemComponents.sockets.data[instance]={sockets:[{plugHash:statPlug,isEnabled:true},{plugHash:archetypePlug,isEnabled:true}]};
-        profile.itemComponents.instances.data[instance]={primaryStat:{value:2000}};
-        profile.profileInventory.data.items.push({itemInstanceId:instance,itemHash:333,state:0});
+        profile.itemComponents.instances.data[instance]={primaryStat:{value:2000},gearTier:3};
+        (n===2?profile.characterInventories.data['100'].items:profile.profileInventory.data.items).push({itemInstanceId:instance,itemHash:333,state:n===0?1:0});
       });
     }
     return {profile,defs};

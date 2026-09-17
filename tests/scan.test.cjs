@@ -88,8 +88,8 @@ test('ambiguous armor base stat stays in review',()=>{
 });
 test('unrecognized armor set can be mapped without guessing',()=>{
   const {profile,defs}=fresh(armor);defs.items[333].displayProperties.name='Unfamiliar Helm';defs.sets={};
-  assert.equal(core.scan(profile,defs,armor).review.length,2);
-  assert.equal(core.scan(profile,defs,armor,{'333':'Example Set'}).armorMatches.length,2);
+  assert.equal(core.scan(profile,defs,armor).review.length,3);
+  assert.equal(core.scan(profile,defs,armor,{'333':'Example Set'}).armorMatches.length,3);
 });
 test('a rescan replaces the scan contribution and preserves manual marks',()=>{
   const {result}=fresh(armor),recordId=armor.combos[0].id;

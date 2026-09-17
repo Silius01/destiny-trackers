@@ -41,7 +41,15 @@ For each reviewed family it locks the keeper, verifies that lock, then unlocks l
 
 ## Armor evaluation
 
-Matches set, slot, and Armor 3.0 archetype. Base investment stats and intrinsic armor stat plugs determine the tertiary stat; mods, tuning, and masterwork bonuses do not manufacture a new combo. Ambiguous base stats are left for review. A missing set mapping can be selected manually and saved by item hash. Exotics track ownership. Armor scans do not change armor locks.
+Matches set, slot, and Armor 3.0 archetype. Base investment stats and intrinsic armor stat plugs determine the tertiary stat; mods, tuning, and masterwork bonuses do not manufacture a new combo. Ambiguous base stats are left for review. A missing set mapping can be selected manually and saved by item hash. Exotics track ownership and are excluded from automatic lock changes, including exotic class items with distinct perk rolls.
+
+### Armor duplicate locks
+
+The armor preview keeps one physical copy per exact **piece (Bungie item hash), class, slot, archetype, tertiary stat, gear tier, and Artifice status**. Different tertiary rolls, classes, tiers, and Artifice versions are separate groups even when they share one checklist entry. Copies across the vault and all characters participate in the same grouping.
+
+The suggested keeper has the highest base-stat total, with ties resolved by existing lock, then Power, then instance ID. Mods, tuning, and masterwork bonuses do not increase that ranking. The preview shows each copy's base-stat distribution and provides a **Copy to keep locked** selector; choices apply to the current preview. Run a new scan to recompute suggestions.
+
+**Save scan & apply … lock changes** locks each selected keeper, verifies its lock, then unlocks the extra copies of that combination. Single-copy combinations are also kept locked. No armor is dismantled. Unknown class/tier data or an unreadable copy pauses lock changes for that entire item-hash family. Before writes, every copy of the affected piece is rechecked, including copies belonging to other tertiary groups; socket, gear-tier, location, Power, or lock changes require a new scan. The same stop-on-error and final verification rules used for weapons apply to armor.
 
 The existing catalog combines classes for its set/slot/archetype checklist. The scan report shows the class, location, and physical instance IDs. All four tertiary variants are required for the existing **Farmed** marker.
 
@@ -61,6 +69,6 @@ Progress remains browser-local on GitHub Pages. Claude-specific database code is
 
 Run `npm test` with Node 20+. No npm packages are required. `node tests/browser/build-harness.cjs` generates ignored local browser fixtures with synthetic inventories and separate `qa-*` progress storage. Serve the directory locally, then open `tests/browser/generated-weapon.html` and `generated-armor.html`. Generated fixtures must not be deployed.
 
-Validation: regression tests and local browser checks cover one-instance ranking, per-item selectable perks, armor base stats, migrations, account selection, OAuth state, exact IDs, lock ordering, save/reload, and failure paths. A live OAuth scan and real account lock changes require the owner's configured Bungie application and have not yet been verified.
+Validation: 39 regression tests and local browser checks cover one-instance ranking, per-item selectable perks, armor base stats and duplicate grouping, keeper selection, migrations, account selection, OAuth state, exact IDs, lock ordering, save/reload, and failure paths. The synthetic armor browser flow verifies keeper selection, applying locks, and a follow-up scan with zero remaining changes. A live OAuth scan and real account lock changes require the owner's configured Bungie application and have not yet been verified.
 
 References: [Bungie OAuth](https://github.com/Bungie-net/api/wiki/OAuth-Documentation), [Bungie API schema](https://github.com/Bungie-net/api/blob/master/openapi.json), and [DIM's public source](https://github.com/DestinyItemManager/DIM) for current socket/stat identifiers and vault lock character selection.

@@ -54,7 +54,8 @@
   function fingerprint(item, profile) {
     return JSON.stringify([item.itemHash,item.state & ~1,item.owner,item.equipped,
       profile.itemComponents?.sockets?.data?.[item.id],profile.itemComponents?.reusablePlugs?.data?.[item.id],
-      profile.itemComponents?.instances?.data?.[item.id]?.primaryStat]);
+      profile.itemComponents?.instances?.data?.[item.id]?.primaryStat,
+      profile.itemComponents?.instances?.data?.[item.id]?.gearTier]);
   }
 
   function resolve(item, profile, defs) {
@@ -98,6 +99,9 @@
     if (kind === 'armor') {
       result.slot = SLOT[def.inventory?.bucketTypeHash] || '';
       result.exotic = def.inventory?.tierType === 6;
+      result.gearTier = profile.itemComponents?.instances?.data?.[item.id]?.gearTier ?? null;
+      result.artifice = sockets.some(s=>s.plugHash && s.isVisible !== false &&
+        (defs.items[s.plugHash]?.plug?.plugCategoryHash === 3773173029 || s.plugHash === 3727270518));
       const setHash = def.equippingBlock?.equipableItemSetHash;
       const gearHash = def.equippingBlock?.gearsetItemHash;
       result.setNames = [defs.sets?.[setHash]?.displayProperties?.name,defs.items[gearHash]?.displayProperties?.name].filter(Boolean);
@@ -193,7 +197,12 @@
         patch.tertiaries = unique([...patch.tertiaries,tertiary]);
         patch.owned = arch.tertiaryOptions.every(s=>patch.tertiaries.includes(s));
         patches[combo.id] = patch;
-        armorMatches.push({...item,recordId:combo.id,tertiary,tertiaryOptions:arch.tertiaryOptions});
+        const baseTotal = Object.values(item.baseStats).reduce((sum,value)=>sum+value,0);
+        const lockIssue = !item.className ? 'Armor class could not be identified' :
+          !Number.isInteger(item.gearTier) || item.gearTier < 1 ? 'Gear tier could not be identified' :
+          Object.values(item.baseStats).some(value=>!Number.isFinite(value) || value<0) ? 'Base stat values could not be read safely' : '';
+        armorMatches.push({...item,recordId:combo.id,tertiary,tertiaryOptions:arch.tertiaryOptions,baseTotal,lockIssue,
+          score:[baseTotal,Number(item.locked),item.power]});
       }
     }
     const weapons = [];
@@ -204,31 +213,50 @@
       weapons.push({recordId,winner,copies});
     }
     weapons.sort((a,b)=>a.winner.name.localeCompare(b.winner.name));
-    return {kind:catalog.kind,at:now,scannedAt,items,weapons,armorMatches,patches,review,
+    const armorGroups = new Map();
+    for (const item of armorMatches.filter(i=>!i.exotic)) {
+      const groupId=JSON.stringify([item.itemHash,item.className,item.slot,item.archetype,item.tertiary,item.gearTier,item.artifice]);
+      if (!armorGroups.has(groupId)) armorGroups.set(groupId,[]);
+      armorGroups.get(groupId).push(item);
+    }
+    const armor = [...armorGroups].map(([groupId,copies])=>{
+      copies.sort(compare);
+      return {groupId,recordId:copies[0].recordId,winner:copies[0],copies};
+    }).sort((a,b)=>a.winner.name.localeCompare(b.winner.name) || a.groupId.localeCompare(b.groupId));
+    return {kind:catalog.kind,at:now,scannedAt,items,weapons,armor,armorMatches,patches,review,
       account:profile.profile?.data?.userInfo?.membershipId || '',membershipType:profile.profile?.data?.userInfo?.membershipType};
   }
 
-  function lockPlan(scanResult) {
+  function lockPlan(scanResult, keepers={}) {
     // A malformed or unrecognized copy with the same item hash makes the whole family review-only.
-    const blocked = new Set(scanResult.review.map(i=>i.itemHash));
-    return scanResult.weapons.filter(g=>!g.copies.some(i=>blocked.has(i.itemHash))).map(g=>({
-      recordId:g.recordId,name:g.winner.name,keeper:g.winner,
-      locks:g.winner.locked ? [] : [g.winner],unlocks:g.copies.slice(1).filter(i=>i.locked),
-      duplicates:g.copies.slice(1),copies:g.copies
-    }));
+    const blocked = new Set([...scanResult.review,...scanResult.armorMatches.filter(i=>i.lockIssue)].map(i=>i.itemHash));
+    const groups = scanResult.kind === 'armor' ? scanResult.armor : scanResult.weapons;
+    return groups.filter(g=>!g.copies.some(i=>blocked.has(i.itemHash))).map(g=>{
+      const keeper=g.copies.find(i=>i.id===keepers[g.groupId]) || g.winner;
+      const duplicates=g.copies.filter(i=>i.id!==keeper.id);
+      return {groupId:g.groupId,recordId:g.recordId,name:keeper.name,keeper,
+        locks:keeper.locked ? [] : [keeper],unlocks:duplicates.filter(i=>i.locked),duplicates,copies:g.copies};
+    });
   }
 
   function validatePlan(plan, original, fresh, now=Date.now()) {
     if (now-original.at > 5*60*1000) throw new Error('This preview is over five minutes old. Scan again before changing locks.');
     if (String(fresh.profile?.data?.userInfo?.membershipId) !== String(original.account)) throw new Error('The connected account changed. Scan again.');
+    if (fresh.profile?.data?.userInfo?.membershipType !== original.membershipType) throw new Error('The connected account changed. Scan again.');
     const byId = new Map(inventory(fresh).map(i=>[i.id,i]));
     if (byId.size !== original.items.length || original.items.some(i=>!byId.has(i.id))) throw new Error('Inventory contents changed since the preview. Scan again.');
+    const checked=new Set();
     for (const group of plan) {
       const hashes = new Set(group.copies.map(i=>i.itemHash));
       const current = [...byId.values()].filter(i=>hashes.has(i.itemHash));
-      const oldIds = new Set(group.copies.map(i=>i.id));
+      // An armor hash can contain several archetype/tertiary groups. Validate the
+      // entire hash family, including copies outside this particular lock group.
+      const previousCopies=original.items.filter(i=>hashes.has(i.itemHash));
+      const oldIds = new Set(previousCopies.map(i=>i.id));
       if (current.length !== oldIds.size || current.some(i=>!oldIds.has(i.id))) throw new Error('Copies changed since the preview. Scan again.');
-      for (const previous of group.copies) {
+      for (const previous of previousCopies) {
+        if (checked.has(previous.id)) continue;
+        checked.add(previous.id);
         const item = byId.get(previous.id);
         if (!item || fingerprint(item,fresh) !== previous.signature || item.locked !== previous.locked) {
           throw new Error('An item moved, its perks changed, or its lock was changed. Scan again.');
