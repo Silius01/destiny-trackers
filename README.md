@@ -73,6 +73,8 @@ The existing catalog combines classes for its set/slot/archetype checklist. The 
 
 In Armor Vault, **View saved checklist** closes the preview and opens the matching rows. The **From scan** filter returns to those entries later. Collected tertiary stats are shown on each row; the **Farmed** checkbox remains unchecked until all four variants are collected. For example, Health and Class appear as `Health/Class (tertiary)` even though the row is not fully farmed.
 
+Armor set titles turn gold when any entry in the set is marked Farmed or has a collected tertiary roll. This includes saved scan results and remains visible when the set is collapsed or some entries are filtered out. Clearing the last mark restores the normal title color.
+
 Each save creates a **before last scan** backup. **Export checklist backup** saves a JSON file. Scanning replaces the prior scan contribution while preserving earlier manual marks. Manual editing detaches an entry from its imported scan metadata. The tracker is a checklist: historical manual marks are preserved even when no current inventory match is found.
 
 Progress remains browser-local on GitHub Pages. Claude-specific database code is retained, but this feature was implemented and tested in the standalone app; the separate Claude Artifact has not been updated.

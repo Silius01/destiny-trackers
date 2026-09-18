@@ -424,6 +424,7 @@
     text-transform:uppercase;
     color:var(--text);
   }
+  .section.has-progress .section-title{color:var(--accent);}
   .section-count{
     font-family:"IBM Plex Mono",monospace;
     font-size:12px;
@@ -1160,6 +1161,14 @@ function onScrollForJumpBar(){
   });
 }
 
+function setHasProgress(setName){
+  return COMBOS.some(combo => {
+    if(combo.setName !== setName) return false;
+    const rec = getRecord(combo.id);
+    return rec.owned || rec.tertiaries.length > 0;
+  });
+}
+
 function renderAll(){
   const sectionsEl = document.getElementById('sections');
   sectionsEl.innerHTML = '';
@@ -1174,6 +1183,7 @@ function renderAll(){
     const section = document.createElement('div');
     section.className = 'section' + (state.collapsed.has(set.name) ? ' collapsed' : '');
     section.dataset.set = set.name;
+    section.classList.toggle('has-progress', setHasProgress(set.name));
 
     const ownedInSection = setItems.reduce((n, c) => n + (getRecord(c.id).owned ? 1 : 0), 0);
 
@@ -1253,6 +1263,8 @@ function replaceRow(combo){
 function updateCounts(combo){
   const section = document.querySelector('.section[data-set="' + CSS.escape(combo.setName) + '"]');
   if(!section) return;
+
+  section.classList.toggle('has-progress', setHasProgress(combo.setName));
 
   const slotGroup = section.querySelector('.slot-group[data-slot="' + CSS.escape(combo.slot) + '"]');
   if(slotGroup){
