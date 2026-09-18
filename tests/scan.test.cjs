@@ -48,7 +48,7 @@ test('priority stat must belong to the chosen instance',()=>{
 test('equal-quality ties favor existing locked copy, then power, with stable ID fallback',()=>{
   const base={id:'1',locked:true,power:10,columns:[['Barrel'],['Magazine'],['Utility'],['Damage']],focusStats:['Range']};
   const a=core.rankWeapon(base,weapon),b=core.rankWeapon({...base,id:'2',locked:false,power:100},weapon);
-  assert.equal(a.score[6],1);assert.equal(b.score[6],0);
+  assert.equal(a.score.at(-2),1);assert.equal(b.score.at(-2),0);
 });
 test('ambiguous same-name versions require mapping; a wrong origin cannot silently match',()=>{
   const {profile,defs}=fresh();const catalog={kind:'weapon',weapons:[weapon,{...weapon,id:1,source:'Other season'}]};

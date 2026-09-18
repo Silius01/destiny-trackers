@@ -143,10 +143,15 @@
     const matches = perks.map(p=>p.length > 0);
     const hasFocus = item.focusStats.some(s=>statName(s) === statName(weapon.statFocus));
     const tier = matches.every(Boolean) && hasFocus ? 'god' : matches[2] && matches[3] ? 'good' : 'basic';
+    const perkCounts = perks.map(ps=>new Set(ps.map(norm)).size);
+    const mainColumnsMatched = Number(matches[2])+Number(matches[3]);
+    const mainPerkChoices = perkCounts[2]+perkCounts[3];
     const popularity = perks.map((ps,c)=>Math.max(0,...ps.map(p=>weapon.rollColsRanked?.[c]?.find(r=>norm(r.name) === norm(p))?.pct || 0)));
-    const score = [{basic:1,good:2,god:3}[tier],Number(matches[2])+Number(matches[3]),matches.filter(Boolean).length,
+    // Reward the recommended options actually owned on this one copy. Coverage
+    // comes first, so three traits in one column cannot replace a missing other column.
+    const score = [mainColumnsMatched,mainPerkChoices,{basic:1,good:2,god:3}[tier],matches.filter(Boolean).length,
       Number(hasFocus),popularity[2]+popularity[3],popularity[0]+popularity[1],Number(item.locked),item.power];
-    return {...item, weapon, perks, hasFocus, tier, score};
+    return {...item, weapon, perks, perkCounts, mainColumnsMatched, mainPerkChoices, hasFocus, tier, score};
   }
   function compare(a,b) {
     for (let n=0;n<a.score.length;n++) if (a.score[n] !== b.score[n]) return b.score[n]-a.score[n];
@@ -287,6 +292,7 @@
       return {instanceId:item.id,itemHash:item.itemHash,name:item.name,location:item.location,locked:item.locked,
         element:item.element,origin:item.origin,frame:item.frame,columns:item.columns,focusStats:item.focusStats,
         catalogId:match?.group.recordId,tier:match?.item.tier,keeper:match?.group.winner.id,matchedPerks:match?.item.perks,
+        perkCounts:match?.item.perkCounts,mainColumnsMatched:match?.item.mainColumnsMatched,mainPerkChoices:match?.item.mainPerkChoices,
         reason:review.get(item.id) || null,missingDefinitions:item.missingDefinitions || [],
         socketCategories:item.def?.sockets?.socketCategories,
         sockets:sockets.map((socket,index)=>({index,current:plug(socket.plugHash),isEnabled:socket.isEnabled,isVisible:socket.isVisible,
