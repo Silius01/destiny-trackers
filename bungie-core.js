@@ -252,6 +252,31 @@
     });
   }
 
+  function armorLockBlockers(result, itemHash) {
+    return [...result.review.filter(i=>i.itemHash===itemHash).map(i=>({instanceId:i.id,reason:i.reason})),
+      ...result.armorMatches.filter(i=>i.itemHash===itemHash && i.lockIssue).map(i=>({instanceId:i.id,reason:i.lockIssue}))];
+  }
+
+  function armorDiagnostics(result, profile, defs, keepers={}) {
+    const matched=new Map(result.armorMatches.map(i=>[i.id,i]));
+    const review=new Map(result.review.map(i=>[i.id,i.reason]));
+    const plan=lockPlan(result,keepers),planned=new Map(plan.flatMap(g=>g.copies.map(i=>[i.id,g])));
+    const statSource=def=>({hash:def?.hash,name:def?.displayProperties?.name || '',category:def?.plug?.plugCategoryHash,
+      identifier:def?.plug?.plugCategoryIdentifier,stats:(def?.investmentStats || []).filter(s=>ARMOR_STATS[s.statTypeHash])
+        .map(s=>({hash:s.statTypeHash,name:ARMOR_STATS[s.statTypeHash],value:s.value,conditional:!!s.isConditionallyActive}))});
+    return result.items.filter(i=>i.kind==='armor' || i.kind==='unknown').map(item=>{
+      const match=matched.get(item.id),group=planned.get(item.id),blockers=armorLockBlockers(result,item.itemHash);
+      const decision=review.has(item.id)?'review':match?.exotic?'ownership-only':!group?'blocked':
+        item.id===group.keeper.id?(item.locked?'keep-locked':'lock'):(item.locked?'unlock':'duplicate-already-unlocked');
+      return {instanceId:item.id,itemHash:item.itemHash,name:item.name,location:item.location,locked:item.locked,
+        className:item.className,slot:item.slot,setNames:item.setNames,archetype:item.archetype,tertiary:match?.tertiary || null,
+        baseStats:item.baseStats,gearTier:item.gearTier,artifice:item.artifice,catalogId:match?.recordId,keeper:group?.keeper.id,
+        decision,reason:review.get(item.id) || match?.lockIssue || null,blockers,missingDefinitions:item.missingDefinitions || [],
+        definitionStats:statSource(item.def),sockets:(profile.itemComponents?.sockets?.data?.[item.id]?.sockets || []).map((s,index)=>({
+          index,plugHash:s.plugHash,isEnabled:s.isEnabled,isVisible:s.isVisible,...statSource(defs.items[s.plugHash])}))};
+    });
+  }
+
   function weaponDiagnostics(result, profile, defs) {
     const ranked=new Map(result.weapons.flatMap(g=>g.copies.map(i=>[i.id,{item:i,group:g}])));
     const review=new Map(result.review.map(i=>[i.id,i.reason]));
@@ -348,5 +373,5 @@
     }
     return next;
   }
-  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,scan,lockPlan,validatePlan,executeLocks,weaponRecord,applyRecords,weaponDiagnostics};
+  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,scan,lockPlan,validatePlan,executeLocks,weaponRecord,applyRecords,weaponDiagnostics,armorDiagnostics,armorLockBlockers};
 });

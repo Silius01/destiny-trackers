@@ -100,7 +100,8 @@
             select.addEventListener('change',()=>{keepers[group.groupId]=select.value;render();const replacement=[...report.querySelectorAll('select')].find(s=>s.getAttribute('aria-label')===select.getAttribute('aria-label'));replacement?.focus({preventScroll:true});});label.append(select);row.append(label);
           }
           row.append(h('small',(action?'Keep locked: ':'Suggested copy: ')+copyText(keeper)));
-          if(!action)row.append(h('small','Lock changes paused: '+(group.copies.find(i=>i.lockIssue)?.lockIssue || 'another copy of this piece needs review'),'scan-warning'));
+          if(!action){row.append(h('small','Lock changes paused for this piece','scan-warning'));
+            for(const blocker of core.armorLockBlockers(result,keeper.itemHash))row.append(h('small','Instance '+blocker.instanceId+': '+blocker.reason,'scan-warning'));}
           const duplicates=group.copies.filter(i=>i.id!==keeper.id);
           if(duplicates.length){const details=h('details');details.append(h('summary',duplicates.length+' duplicate'+(duplicates.length===1?'':'s')+(action?' · '+action.unlocks.length+' to unlock':' · review required')));for(const copy of duplicates)details.append(h('p',copyText(copy)),h('small',!action?'Lock unchanged':copy.locked?'Will unlock':'Already unlocked'));row.append(details);}
           else row.append(h('small','Only copy of this combination'));
@@ -110,8 +111,10 @@
         if(exotics.length){const details=h('details');details.append(h('summary',exotics.length+' exotic copies · ownership only'));for(const copy of exotics)details.append(h('p',copy.name+' · '+copy.className+' · '+copy.location+' · '+copy.id),h('small','No automatic exotic lock changes'));report.append(details);}
       }
       if(result.review.length){const review=h('details');review.append(h('summary','Review '+result.review.length+' unmatched or ambiguous copies'));
-        const seen=new Set();for(const item of result.review){const reviewKey=item.itemHash+':'+item.reason;if(seen.has(reviewKey))continue;seen.add(reviewKey);const row=h('div',undefined,'scan-item');row.append(h('b',item.name),h('small',item.reason+' · item '+item.itemHash),h('small','Instance '+item.id+' · '+item.location));
+        const seen=new Set();for(const item of result.review){const reviewKey=kind==='armor'?item.id:item.itemHash+':'+item.reason;if(seen.has(reviewKey))continue;seen.add(reviewKey);const row=h('div',undefined,'scan-item');row.append(h('b',item.name),h('small',item.reason+' · item '+item.itemHash),h('small','Instance '+item.id+' · '+item.location));
           if(item.kind==='weapon'){row.append(h('small','Origin read: '+(item.origin?.join(' / ') || 'not available')));item.columns?.forEach((col,index)=>row.append(h('small','Column '+(index+1)+': '+col.join(' / '))));}
+          if(item.kind==='armor'){row.append(h('small','Archetype read: '+(item.archetype || 'not available')),
+            h('small','Base stats: '+(Object.entries(item.baseStats || {}).map(([stat,value])=>stat+' '+value).join(' · ') || 'not available')));}
           const options=item.options?.map(w=>({value:String(w.id),text:w.name+' · '+w.element+' · '+w.source+' · '+w.archetype+' · catalog '+w.id})) || item.setOptions?.map(s=>({value:s.name,text:s.name}));
           if(options?.length){const select=h('select');select.setAttribute('aria-label','Catalog match for '+item.name);const empty=h('option','Choose a catalog match…');empty.value='';select.append(empty);for(const option of options){const o=h('option',option.text);o.value=option.value;select.append(o);}select.addEventListener('change',()=>{if(!select.value)return;mappings={...mappings,[item.itemHash]:select.value};localStorage.setItem('vaultBungieMappings-'+kind,JSON.stringify(mappings));analyze();});row.append(select);}review.append(row);
         }report.append(review);}
@@ -130,10 +133,10 @@
           finally{result=null;report.replaceChildren();}
         }),'primary');apply.dataset.apply='';apply.dataset.empty=String(changes===0);actions.append(apply);
       }
-      lastReport={version:2,kind,at:result.scannedAt,account:result.account,
+      lastReport={version:3,kind,at:result.scannedAt,account:result.account,
         weapons:result.weapons.map(g=>({catalogId:g.recordId,keeper:g.winner.id,tier:g.winner.tier,perks:g.winner.perks,duplicates:g.copies.slice(1).map(i=>i.id)})),
         armor:result.armorMatches.map(i=>({instanceId:i.id,recordId:i.recordId,itemHash:i.itemHash,className:i.className,archetype:i.archetype,tertiary:i.tertiary,gearTier:i.gearTier,artifice:i.artifice,baseStats:i.baseStats,location:i.location,locked:i.locked,lockIssue:i.lockIssue})),
-        ...(kind==='weapon'?{weaponCopies:core.weaponDiagnostics(result,profile,defs)}:{}),
+        ...(kind==='weapon'?{weaponCopies:core.weaponDiagnostics(result,profile,defs)}:{armorCopies:core.armorDiagnostics(result,profile,defs,keepers)}),
         lockPlan:plan.map(g=>({groupId:g.groupId,keeper:g.keeper.id,locks:g.locks.map(i=>i.id),unlocks:g.unlocks.map(i=>i.id),duplicates:g.duplicates.map(i=>i.id)})),review:result.review.map(i=>({instanceId:i.id,itemHash:i.itemHash,name:i.name,reason:i.reason}))};
       actions.append(button('Export scan report',()=>download(lastReport,kind+'-scan-report.json')));report.append(actions);
       updateButtons();
