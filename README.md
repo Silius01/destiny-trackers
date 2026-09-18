@@ -69,6 +69,10 @@ The existing catalog combines classes for its set/slot/archetype checklist. The 
 
 ## Progress and backups
 
+**Save scan to checklist** changes to **Saved to checklist** after persistence succeeds, with a count beside the save controls. Errors appear in the same place. Completed scans can still be saved to the local checklist after five minutes; the five-minute limit continues to apply to game lock changes.
+
+In Armor Vault, **View saved checklist** closes the preview and opens the matching rows. The **From scan** filter returns to those entries later. Collected tertiary stats are shown on each row; the **Farmed** checkbox remains unchecked until all four variants are collected. For example, Health and Class appear as `Health/Class (tertiary)` even though the row is not fully farmed.
+
 Each save creates a **before last scan** backup. **Export checklist backup** saves a JSON file. Scanning replaces the prior scan contribution while preserving earlier manual marks. Manual editing detaches an entry from its imported scan metadata. The tracker is a checklist: historical manual marks are preserved even when no current inventory match is found.
 
 Progress remains browser-local on GitHub Pages. Claude-specific database code is retained, but this feature was implemented and tested in the standalone app; the separate Claude Artifact has not been updated.
@@ -82,6 +86,8 @@ Progress remains browser-local on GitHub Pages. Claude-specific database code is
 - `bungie-example.js`: synthetic sample inventory.
 
 Run `npm test` with Node 20+. No npm packages are required. `node tests/browser/build-harness.cjs` generates ignored local browser fixtures with synthetic inventories and separate `qa-*` progress storage. Serve the directory locally, then open `tests/browser/generated-weapon.html` and `generated-armor.html`. Generated fixtures must not be deployed.
+
+For the armor save flow, use `generated-armor.html?armor=twisting&aged=1` to test saving a completed scan older than five minutes while lock application stays blocked. Use `?armor=twisting&storage-fail=1` to test a failed checklist write. Browser QA verified visible save feedback, the saved-row filter, persistence after reload, the expired lock rejection, and the visible storage error without a success label.
 
 Validation: 67 regression tests and local browser checks cover saved settings, session migration, OAuth client isolation, one-instance ranking, enhanced multi-perk Brass Attacks, missing-definition diagnostics, manifest cache invalidation, per-item selectable perks, armor base stats and duplicate grouping, keeper selection, account selection, OAuth state, exact IDs, lock ordering, save/reload, and failure paths. The Bane of Sorrow tests cover 3 + 1 versus 1 + 1, stronger main-column coverage, unavailable perks, unchanged tier labels, and verified keeper replacement. The Twisting Echo fixture uses selected real Bungie definitions with synthetic instances: two unlocked Powerhouse/Health copies yield one keeper, while the Class tertiary remains separate. The synthetic armor browser flow verifies keeper selection, applying locks, and a follow-up scan with zero remaining changes. A live OAuth scan and real account lock changes require the owner's configured Bungie application and have not yet been verified.
 

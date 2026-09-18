@@ -6,7 +6,7 @@
   const count=(n,one,many=one+'s')=>n+' '+(n===1?one:many);
   function mount(adapter){
     const kind=adapter.catalog.kind,api=VaultBungie,core=VaultScanCore,key=adapter.storageKey;
-    let profile,defs,result,client,accounts=[],busy=false,demo=false,keepers={},lastReport=null;
+    let profile,defs,result,client,accounts=[],busy=false,demo=false,keepers={},lastReport=null,savedScan=false;
     let mappings=read('vaultBungieMappings-'+kind,{});
     const dialog=h('dialog',undefined,'bungie-dialog');
     const header=h('header');header.append(h('h2',kind==='weapon'?'Scan weapons':'Scan armor'),button('Close',()=>dialog.close()));
@@ -39,14 +39,19 @@
     controls.append(accountSelect,scanButton,refreshButton,sampleButton);body.append(controls);
     const statusBox=h('div','Connect Bungie to scan your inventory, or try an example.', 'scan-status');statusBox.setAttribute('role','status');statusBox.setAttribute('aria-live','polite');body.append(statusBox);
     const report=h('div');body.append(report);
+    const actionStatus=h('div',undefined,'scan-status');actionStatus.hidden=true;body.append(actionStatus);
+    const savedActions=h('div',undefined,'scan-actions');
+    const viewSaved=button('View saved checklist',()=>{dialog.close();adapter.showSavedRecords?.();});viewSaved.hidden=true;viewSaved.dataset.edit='';
+    if(adapter.showSavedRecords){savedActions.append(viewSaved);body.append(savedActions);}
     const backups=h('div',undefined,'scan-actions');
     const exportLast=button('Export last scan report',()=>{if(lastReport)download(lastReport,kind+'-scan-report.json');});exportLast.disabled=true;
     backups.append(button('Export checklist backup',()=>download({format:'destiny-vault-backup',version:1,kind,at:new Date().toISOString(),records:adapter.getRecords()},kind+'-vault-backup.json')),
-      button('Restore before last scan',()=>run(async()=>{const data=read(key+'-before-scan',null);if(!data?.records)throw new Error('There is no saved pre-scan backup.');await adapter.replaceRecords(data.records);status('Restored the checklist from before the last scan. Game locks are unchanged.');})),exportLast);body.append(backups);
+      button('Restore before last scan',()=>run(async()=>{const data=read(key+'-before-scan',null);if(!data?.records)throw new Error('There is no saved pre-scan backup.');await adapter.replaceRecords(data.records);savedScan=false;viewSaved.hidden=true;const save=report.querySelector('[data-save]');if(save)save.textContent='Save scan to checklist';status('Restored the checklist from before the last scan. Game locks are unchanged.');})),exportLast);body.append(backups);
     const how=h('details');how.append(h('summary','How matching and ranking work'),h('p',kind==='weapon'?
       'Keeper ranking first favors matching both main perk columns (3 and 4), then more distinct recommended choices across those columns on the same copy. For example, 3 + 1 beats 1 + 1, even with a weaker barrel or masterwork. Ties use roll tier, total matching columns, priority stat, community popularity, existing lock, then Power. God still means all four recommended columns plus the priority stat; Good means columns 3 and 4 match; Basic is below those requirements. Unowned crafting options and unavailable perks are not counted. Different catalog versions require a clear match.' :
       'Only base armor stats determine the tertiary stat. Each physical item contributes its own combination. A set/slot/archetype is fully farmed when all four tertiary variants are tracked. Duplicate groups require the same piece, class, archetype, tertiary, gear tier, and Artifice status. The suggested keeper has the highest base-stat total; ties prefer an existing lock, then Power. Choose another copy in the preview if its stat distribution suits your build. Exotic entries track ownership and have no automatic lock plan.'),h('p','Scans update matched entries and preserve earlier manual marks. A rescan replaces the previous scan’s contribution. Unrecognized items remain in the review list.'));body.append(how);
-    function status(message,error=false){statusBox.textContent=message;statusBox.classList.toggle('error',error);}
+    function status(message,error=false){statusBox.textContent=message;statusBox.classList.toggle('error',error);
+      actionStatus.textContent=message;actionStatus.classList.toggle('error',error);actionStatus.hidden=!(result || lastReport || error);}
     function updateButtons(){scanButton.disabled=refreshButton.disabled=busy || !api.connected();sampleButton.disabled=busy;accountSelect.disabled=busy;exportLast.disabled=busy || !lastReport;body.querySelectorAll('[data-apply]').forEach(b=>b.disabled=busy || demo || b.dataset.empty==='true');body.querySelectorAll('select, [data-edit], .scan-fields input').forEach(b=>b.disabled=busy || b.dataset.unavailable==='true');connActions.querySelectorAll('button').forEach(b=>b.disabled=busy);}
     async function run(action){if(busy)return;busy=true;updateButtons();try{await action();}catch(e){status(e.message || 'The scan could not finish.',true);}finally{busy=false;updateButtons();}}
     async function refreshConnection(){
@@ -56,7 +61,7 @@
         client=api.client(accounts[0]);status('Connected. Ready to scan the vault and all characters.');});}
     }
     async function scanLive(refresh=false){
-      demo=false;result=null;report.replaceChildren();
+      demo=false;result=null;savedScan=false;viewSaved.hidden=true;report.replaceChildren();
       if(!client){accounts=await api.memberships();if(accounts.length!==1)throw new Error('Select your Destiny account before scanning.');client=api.client(accounts[0]);}
       status('Reading your vault and every character…');profile=await client.profile();
       core.inventory(profile);defs=await api.definitions(status,{refresh});
@@ -68,7 +73,7 @@
     async function scanSample(){
       demo=true;const sample=root.VaultScanExample(adapter.catalog);profile=sample.profile;defs=sample.defs;analyze();
     }
-    function analyze(){keepers={};result=core.scan(profile,defs,adapter.catalog,mappings);render();status(demo?'Example only — this cannot save to your checklist or change game locks.':'Scan complete. Review the copies and proposed changes below.');}
+    function analyze(){keepers={};savedScan=false;viewSaved.hidden=true;result=core.scan(profile,defs,adapter.catalog,mappings);render();status(demo?'Example only — this cannot save to your checklist or change game locks.':'Scan complete. Review the copies and proposed changes below.');}
     function stat(value,label){const box=h('div',undefined,'scan-stat');box.append(h('b',String(value)),h('small',label));return box;}
     function render(){
       report.replaceChildren();const plan=core.lockPlan(result,keepers);
@@ -120,7 +125,10 @@
           if(options?.length){const select=h('select');select.setAttribute('aria-label','Catalog match for '+item.name);const empty=h('option','Choose a catalog match…');empty.value='';select.append(empty);for(const option of options){const o=h('option',option.text);o.value=option.value;select.append(o);}select.addEventListener('change',()=>{if(!select.value)return;mappings={...mappings,[item.itemHash]:select.value};localStorage.setItem('vaultBungieMappings-'+kind,JSON.stringify(mappings));analyze();});row.append(select);}review.append(row);
         }report.append(review);}
       const actions=h('div',undefined,'scan-actions');
-      const save=button('Save scan to checklist',()=>run(saveScan),'primary');save.dataset.apply='';actions.append(save);
+      const save=button(savedScan?'Saved to checklist':'Save scan to checklist',()=>run(async()=>{
+        save.textContent='Saving…';
+        try{await saveScan();}catch(error){save.textContent='Save scan to checklist';throw error;}
+      }),'primary');save.dataset.apply='';save.dataset.save='';actions.append(save);
       {
         const changes=plan.reduce((n,g)=>n+g.locks.length+g.unlocks.length,0);
         report.append(h('p','Lock plan: '+count(plan.reduce((n,g)=>n+g.locks.length,0),'selected copy','selected copies')+' to lock; '+count(plan.reduce((n,g)=>n+g.unlocks.length,0),'duplicate')+' to unlock. Each keeper is locked and verified before its duplicates are unlocked. Unlocking allows manual dismantling in game.'));
@@ -129,7 +137,7 @@
           backup();status('Rechecking inventory and locking the selected copies…');
           // Clear the preview even after partial failure. A new scan is required to retry.
           const current=result;
-          try{await core.executeLocks(plan,client,current,done=>status(done.length+' lock changes applied…'));await saveScan(false,true);lastReport.lockResult={status:'verified'};status('Checklist saved. Keeper locks and duplicate unlocks verified.');}
+          try{await core.executeLocks(plan,client,current,done=>status(done.length+' lock changes applied…'));await saveScan(false);lastReport.lockResult={status:'verified'};status('Checklist saved. Keeper locks and duplicate unlocks verified.');}
           catch(error){lastReport.lockResult={status:'failed',message:error.message,completed:error.completed || []};throw error;}
           finally{result=null;report.replaceChildren();}
         }),'primary');apply.dataset.apply='';apply.dataset.empty=String(changes===0);actions.append(apply);
@@ -143,12 +151,17 @@
       updateButtons();
     }
     function backup(){localStorage.setItem(key+'-before-scan',JSON.stringify({at:new Date().toISOString(),records:adapter.getRecords()}));}
-    async function saveScan(makeBackup=true,locksVerified=false){
+    async function saveScan(makeBackup=true){
       if(!result || demo)throw new Error('Run a live scan first.');
-      if(!locksVerified && Date.now()-result.at>5*60*1000)throw new Error('The scan is over five minutes old. Scan again before saving.');
+      // Saving this completed snapshot only changes the checklist. Freshness for
+      // game lock writes remains enforced independently by core.validatePlan.
       if(makeBackup)backup();
       const records=core.applyRecords(adapter.getRecords(),result,adapter.normalize);
-      await adapter.replaceRecords(records);status('Scan saved to the checklist. A backup of the previous marks is available below.');
+      await adapter.replaceRecords(records);savedScan=true;
+      const save=report.querySelector('[data-save]');if(save)save.textContent='Saved to checklist';
+      viewSaved.hidden=!adapter.showSavedRecords;
+      const patches=Object.values(result.patches),rolls=patches.reduce((n,p)=>n+(p.tertiaries?.length || 0),0);
+      status('Saved '+count(patches.length,'checklist entry','checklist entries')+(kind==='armor'?' with '+count(rolls,'tertiary roll')+'. Farmed checkboxes mean all four tertiary variants are collected.':'.')+' A backup of the previous marks is available below.');
     }
     function download(data,name){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=h('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
     if(api.connected()){connection.open=false;}else{connection.open=true;}

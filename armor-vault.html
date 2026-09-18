@@ -644,6 +644,7 @@
           <button class="chip active" data-status="all">All</button>
           <button class="chip" data-status="owned">Farmed</button>
           <button class="chip" data-status="unowned">Missing</button>
+          <button class="chip" data-status="scanned">From scan</button>
           <span class="chip-sep"></span>
           <button class="chip" id="expandAllBtn" data-action="expand">Expand all</button>
           <button class="chip" id="collapseAllBtn" data-action="collapse">Collapse all</button>
@@ -665,7 +666,7 @@
 <script src="bungie-core.js"></script>
 <script src="bungie-api.js"></script>
 <script src="bungie-example.js"></script>
-<script src="bungie-ui.js"></script>
+<script src="bungie-ui.js?v=20260917-save-feedback"></script>
 <script>
 const SLOTS = ['Helmet','Gauntlets','Chest Armor','Leg Armor','Class Item'];
 const SETS = [{"name":"Aion Adapter","source":"Exploring Kepler"},{"name":"Aion Renewal","source":"Exploring Kepler"},{"name":"Apostate's Blade","source":"Pit of Heresy Dungeon"},{"name":"Atheon's Memory","source":"Vault of Glass Raid"},{"name":"Bushido","source":"Pinnacle Activities"},{"name":"Circuit","source":"Sparrow Racing League"},{"name":"Coda","source":"Prophecy Dungeon"},{"name":"Collective Psyche","source":"The Desert Perpetual"},{"name":"Crota's Memory","source":"Crota's End Raid"},{"name":"Cruel Electrum","source":"Trials of Osiris Challenges"},{"name":"Crystocrene","source":"Europa"},{"name":"Cyberserpent Null","source":"Gambit"},{"name":"Dark Age","source":"Warlord's Ruin Dungeon"},{"name":"Deep Explorer","source":"Dungeon Duality"},{"name":"Disaster Corps","source":"Portal Activities"},{"name":"Dreambane","source":"Moon"},{"name":"Eutechnology","source":"Pinnacle Activities"},{"name":"Exodus Down","source":"Nessus"},{"name":"Ferropotent","source":"Ferropotent Suit"},{"name":"First Ascent","source":"Pale Heart"},{"name":"Flain","source":"Sundered Doctrine"},{"name":"Great Hunt","source":"Last Wish Raid"},{"name":"Iron Battalion","source":"Iron Banner"},{"name":"Iron Panoply","source":"Iron Banner"},{"name":"Kentarch 3","source":"Garden of Salvation Raid"},{"name":"Last Discipline","source":"Portal Activities"},{"name":"Legacy's Oath","source":"Deep Stone Crypt Raid"},{"name":"Luminopotent","source":"Portal Activities"},{"name":"Lustrous","source":"Solstice"},{"name":"New Demotic","source":"Trials of Osiris Challenges"},{"name":"Nezarec's Nightmare","source":"Root of Nightmares Raid"},{"name":"Oryx's Memory","source":"King's Fall Raid"},{"name":"Pantheos Resplendent","source":"Pantheon"},{"name":"Per Audacia","source":"Glory Matches in Crucible"},{"name":"Promised","source":"Salvation's Edge Raid"},{"name":"Resonant Fury","source":"Vow of the Disciple Raid"},{"name":"Reverie Dawn","source":"Dreaming City"},{"name":"Sage Protector","source":"Equilibrium Dungeon"},{"name":"Seventh Seraph","source":"Cosmodrome"},{"name":"Shrewd Survivor","source":"Lawless Frontier Activities"},{"name":"Smoke Jumper","source":"Portal Activities"},{"name":"Spacewalk","source":"Vesper's Host"},{"name":"Swordmaster","source":"Pinnacle Activities"},{"name":"Taken King","source":"Ghosts of the Deep Dungeon"},{"name":"Techeun's Regalia","source":"Shattered Throne Dungeon"},{"name":"Techsec","source":"Portal Activities"},{"name":"Thriving Survivor","source":"Lawless Frontier Activities"},{"name":"Thunderhead","source":"Neomuna"},{"name":"TM Custom","source":"Spire of the Watcher Dungeon"},{"name":"Triumphal Anthem","source":"Portal Activities"},{"name":"Twofold Crown","source":"Trials of Osiris Challenges"},{"name":"Veritas","source":"Throne World"},{"name":"Wayward Psyche","source":"The Desert Perpetual Epic Raid"},{"name":"Wild Anthem","source":"Wild Anthem Suit"},{"name":"Wildwood","source":"EDZ"},{"name":"Yearning Echo","source":"Grasp of Avarice Dungeon"}];
@@ -878,6 +879,7 @@ function matchesFilters(combo){
   const rec = getRecord(combo.id);
   if(state.status === 'owned' && !rec.owned) return false;
   if(state.status === 'unowned' && rec.owned) return false;
+  if(state.status === 'scanned' && rec.scan?.source !== 'bungie') return false;
   if(state.query){
     const hay = combo.isExotic
       ? (combo.name + ' ' + combo.slot + ' ' + combo.setName).toLowerCase()
@@ -896,6 +898,18 @@ function statPill(stat){
   span.appendChild(dot);
   span.appendChild(document.createTextNode(stat));
   return span;
+}
+
+function showScannedRecords(){
+  state.query='';state.status='scanned';
+  document.getElementById('searchInput').value='';
+  document.querySelectorAll('#statusChips [data-status]').forEach(b=>b.classList.toggle('active',b.dataset.status==='scanned'));
+  for(const combo of COMBOS){
+    if(getRecord(combo.id).scan?.source!=='bungie')continue;
+    state.collapsed.delete(combo.setName);
+    state.collapsedSlots.delete(combo.setName+'|'+combo.slot);
+  }
+  renderAll();window.scrollTo({top:0,behavior:'instant'});
 }
 
 function buildRow(combo){
@@ -1300,6 +1314,7 @@ function wireControls(){
     const btn = e.target.closest('button.chip');
     if(!btn) return;
     if(btn.dataset.status){
+      if(btn.dataset.status==='scanned'){showScannedRecords();return;}
       state.status = btn.dataset.status;
       [...document.querySelectorAll('#statusChips [data-status]')].forEach(b => b.classList.toggle('active', b === btn));
       renderAll();
@@ -1321,6 +1336,7 @@ wireControls();
 initDb().then(() => VaultBungieUI.mount({
   catalog: {kind:'armor',sets:SETS,combos:COMBOS,archetypes:ARCHETYPES}, storageKey: 'armorVaultRecords',
   getRecords: () => state.records, normalize: normalizeRecord,
+  showSavedRecords: showScannedRecords,
   replaceRecords: async records => {
     const normalized = Object.fromEntries(Object.entries(records).map(([id,record]) => [id,normalizeRecord(record)]));
     localStorage.setItem('armorVaultRecords', JSON.stringify(normalized));
