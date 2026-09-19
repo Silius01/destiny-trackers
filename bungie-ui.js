@@ -49,7 +49,7 @@
       button('Restore before last scan',()=>run(async()=>{const data=read(key+'-before-scan',null);if(!data?.records)throw new Error('There is no saved pre-scan backup.');await adapter.replaceRecords(data.records);savedScan=false;viewSaved.hidden=true;const save=report.querySelector('[data-save]');if(save)save.textContent='Save scan to checklist';status('Restored the checklist from before the last scan. Game locks are unchanged.');})),exportLast);body.append(backups);
     const how=h('details');how.append(h('summary','How matching and ranking work'),h('p',kind==='weapon'?
       'Keeper ranking first favors matching both main perk columns (3 and 4), then more distinct recommended choices across those columns on the same copy. For example, 3 + 1 beats 1 + 1, even with a weaker barrel or masterwork. Ties use roll tier, total matching columns, priority stat, community popularity, existing lock, then Power. God still means all four recommended columns plus the priority stat; Good means columns 3 and 4 match; Basic is below those requirements. Unowned crafting options and unavailable perks are not counted. Different catalog versions require a clear match.' :
-      'Only base armor stats determine the tertiary stat. Each physical item contributes its own combination. A set/slot/archetype is fully farmed when all four tertiary variants are tracked. Duplicate groups require the same piece, class, archetype, tertiary, gear tier, and Artifice status. The suggested keeper has the highest base-stat total; ties prefer an existing lock, then Power. Choose another copy in the preview if its stat distribution suits your build. Exotic entries track ownership and have no automatic lock plan.'),h('p','Scans update matched entries and preserve earlier manual marks. A rescan replaces the previous scan’s contribution. Unrecognized items remain in the review list.'));body.append(how);
+      'Only base armor stats determine the tertiary stat. Each physical item contributes its own combination. A set/slot/archetype is fully farmed when all four tertiary variants are tracked. Duplicate groups require the same piece, class, archetype, tertiary, gear tier, and Artifice status. Exotic class items also require the same two perks. The suggested keeper has the highest base-stat total; ties prefer an existing lock, then Power. Choose another copy in the preview if its stat distribution suits your build. Older or unreadable exotic rolls retain ownership tracking and need review before lock changes.'),h('p','Scans update matched entries and preserve earlier manual marks. A rescan replaces the previous scan’s contribution. Unrecognized items remain in the review list.'));body.append(how);
     function status(message,error=false){statusBox.textContent=message;statusBox.classList.toggle('error',error);
       actionStatus.textContent=message;actionStatus.classList.toggle('error',error);actionStatus.hidden=!(result || lastReport || error);}
     function updateButtons(){scanButton.disabled=refreshButton.disabled=busy || !api.connected();sampleButton.disabled=busy;accountSelect.disabled=busy;exportLast.disabled=busy || !lastReport;body.querySelectorAll('[data-apply]').forEach(b=>b.disabled=busy || demo || b.dataset.empty==='true');body.querySelectorAll('select, [data-edit], .scan-fields input').forEach(b=>b.disabled=busy || b.dataset.unavailable==='true');connActions.querySelectorAll('button').forEach(b=>b.disabled=busy);}
@@ -92,13 +92,14 @@
           tr.append(name,tier,perks,dup);tbody.append(tr);
         }wrap.append(table);report.append(wrap);
       }else{
-        report.append(h('h3','Keep one copy of each armor combination'),h('p','Different pieces, classes, archetypes, tertiary stats, gear tiers, and Artifice versions stay separate. Suggested keepers use the highest base-stat total. Choose a different copy below if you prefer its distribution.'));
+        report.append(h('h3','Keep one copy of each armor combination'),h('p','Legendary and exotic armor keep separate copies for different pieces, classes, archetypes, tertiary stats, gear tiers, and Artifice versions. Exotic class-item perk pairs also stay separate. Suggested keepers use the highest base-stat total. Choose a different copy below if you prefer its distribution.'));
         const statsText=copy=>Object.entries(copy.baseStats).filter(([,value])=>value>0).map(([stat,value])=>stat+' '+value).join(' · ');
         const copyText=copy=>copy.baseTotal+' base total · '+statsText(copy)+' · '+copy.power+' Power · '+copy.location+' · '+(copy.locked?'locked':'unlocked')+' · '+copy.id;
         for(const group of result.armor){
           const action=plan.find(p=>p.groupId===group.groupId),keeper=action?.keeper || group.winner;
           const row=h('div',undefined,'scan-item');
-          const combo=keeper.className+' · '+keeper.slot+' · '+keeper.archetype+' / '+keeper.tertiary+' · '+(keeper.gearTier?'Tier '+keeper.gearTier:'Unknown tier')+(keeper.artifice?' · Artifice':'');
+          const combo=keeper.className+' · '+keeper.slot+' · '+keeper.archetype+' / '+keeper.tertiary+' · '+(keeper.gearTier?'Tier '+keeper.gearTier:'Unknown tier')+(keeper.artifice?' · Artifice':'')+
+            (keeper.exoticPerks?.length?' · '+keeper.exoticPerks.map(p=>p.name).join(' + '):'');
           row.append(h('b',keeper.name),h('small',combo));
           if(group.copies.length>1 && action){
             const label=h('label','Copy to keep locked'),select=h('select');select.setAttribute('aria-label','Copy to keep: '+keeper.name+' · '+combo);
@@ -113,8 +114,8 @@
           else row.append(h('small','Only copy of this combination'));
           report.append(row);
         }
-        const exotics=result.armorMatches.filter(i=>i.exotic);
-        if(exotics.length){const details=h('details');details.append(h('summary',exotics.length+' exotic copies · ownership only'));for(const copy of exotics)details.append(h('p',copy.name+' · '+copy.className+' · '+copy.location+' · '+copy.id),h('small','No automatic exotic lock changes'));report.append(details);}
+        const exotics=result.armorMatches.filter(i=>i.ownershipOnly);
+        if(exotics.length){const details=h('details');details.append(h('summary',count(exotics.length,'exotic copy','exotic copies')+' · ownership tracked, roll needs review'));for(const copy of exotics)details.append(h('p',copy.name+' · '+copy.className+' · '+copy.location+' · '+copy.id),h('small','Locks unchanged: '+(result.review.find(i=>i.id===copy.id)?.reason || 'Roll could not be read')));report.append(details);}
       }
       if(result.review.length){const review=h('details');review.append(h('summary','Review '+result.review.length+' unmatched or ambiguous copies'));
         const seen=new Set();for(const item of result.review){const reviewKey=kind==='armor'?item.id:item.itemHash+':'+item.reason;if(seen.has(reviewKey))continue;seen.add(reviewKey);const row=h('div',undefined,'scan-item');row.append(h('b',item.name),h('small',item.reason+' · item '+item.itemHash),h('small','Instance '+item.id+' · '+item.location));
@@ -144,7 +145,7 @@
       }
       lastReport={version:3,kind,at:result.scannedAt,account:result.account,
         weapons:result.weapons.map(g=>({catalogId:g.recordId,keeper:g.winner.id,tier:g.winner.tier,perks:g.winner.perks,perkCounts:g.winner.perkCounts,mainColumnsMatched:g.winner.mainColumnsMatched,mainPerkChoices:g.winner.mainPerkChoices,duplicates:g.copies.slice(1).map(i=>i.id)})),
-        armor:result.armorMatches.map(i=>({instanceId:i.id,recordId:i.recordId,itemHash:i.itemHash,className:i.className,archetype:i.archetype,tertiary:i.tertiary,gearTier:i.gearTier,artifice:i.artifice,baseStats:i.baseStats,location:i.location,locked:i.locked,lockIssue:i.lockIssue})),
+        armor:result.armorMatches.map(i=>({instanceId:i.id,recordId:i.recordId,itemHash:i.itemHash,className:i.className,archetype:i.archetype,tertiary:i.tertiary,gearTier:i.gearTier,artifice:i.artifice,exotic:i.exotic,exoticPerks:i.exoticPerks,ownershipOnly:i.ownershipOnly,baseStats:i.baseStats,location:i.location,locked:i.locked,lockIssue:i.lockIssue})),
         ...(kind==='weapon'?{weaponCopies:core.weaponDiagnostics(result,profile,defs)}:{armorCopies:core.armorDiagnostics(result,profile,defs,keepers)}),
         lockPlan:plan.map(g=>({groupId:g.groupId,keeper:g.keeper.id,locks:g.locks.map(i=>i.id),unlocks:g.unlocks.map(i=>i.id),duplicates:g.duplicates.map(i=>i.id)})),review:result.review.map(i=>({instanceId:i.id,itemHash:i.itemHash,name:i.name,reason:i.reason}))};
       actions.append(button('Export scan report',()=>download(lastReport,kind+'-scan-report.json')));report.append(actions);
@@ -161,7 +162,10 @@
       const save=report.querySelector('[data-save]');if(save)save.textContent='Saved to checklist';
       viewSaved.hidden=!adapter.showSavedRecords;
       const patches=Object.values(result.patches),rolls=patches.reduce((n,p)=>n+(p.tertiaries?.length || 0),0);
-      status('Saved '+count(patches.length,'checklist entry','checklist entries')+(kind==='armor'?' with '+count(rolls,'tertiary roll')+'. Farmed checkboxes mean all four tertiary variants are collected.':'.')+' A backup of the previous marks is available below.');
+      const exoticRolls=result.armor.filter(g=>g.winner.exotic).length;
+      const details=kind==='armor'?[rolls?count(rolls,'legendary tertiary roll'):'',exoticRolls?count(exoticRolls,'exotic roll combination'):''].filter(Boolean).join(' and '):'';
+      status('Saved '+count(patches.length,'checklist entry','checklist entries')+(details?' with '+details:'')+'.'+
+        (kind==='armor'?' Legendary Farmed checkboxes require all four tertiary variants; exotic checkboxes show ownership.':'')+' A backup of the previous marks is available below.');
     }
     function download(data,name){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=h('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
     if(api.connected()){connection.open=false;}else{connection.open=true;}

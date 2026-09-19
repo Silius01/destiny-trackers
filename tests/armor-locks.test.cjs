@@ -79,12 +79,14 @@ test('unknown class, tier, or unreadable same-piece copy prevents armor lock cha
     assert.equal(core.lockPlan(core.scan(profile,defs,catalog)).length,0,mode);
   }
 });
-test('exotics track ownership without ever being unlocked as generic duplicates',()=>{
+test('exotics track ownership and keep a separate copy of each archetype and tertiary',()=>{
   const {profile,defs}=fresh();defs.items[333].inventory.tierType=6;
   const exoticCatalog={...catalog,combos:[{id:'exotic',name:'Example Set Helmet',slot:'Helmet',isExotic:true}]};
   const result=core.scan(profile,defs,exoticCatalog);
   assert.equal(result.armorMatches.length,3);assert.equal(result.patches.exotic.owned,true);
-  assert.deepEqual(core.lockPlan(result),[]);
+  assert.equal(result.armor.length,2);
+  assert.equal(core.lockPlan(result).find(g=>g.keeper.tertiary==='Weapons').keeper.id,best);
+  assert.deepEqual(core.lockPlan(result).flatMap(g=>g.unlocks).map(i=>i.id),[first]);
 });
 test('multiple combinations with one item hash pass preflight and keep one verified lock per combo',async()=>{
   const {profile,result}=fresh(),plan=core.lockPlan(result),actions=[];

@@ -12,6 +12,7 @@ for(const kind of ['weapon','armor']){
 fs.writeFileSync(path.join(__dirname,'mock-runtime.js'),`
 let fixture;
 const realArmor=${fs.readFileSync(path.join(__dirname,'../fixtures/twisting-echo.json'),'utf8')};
+const realExotics=${fs.readFileSync(path.join(__dirname,'../fixtures/exotic-armor.json'),'utf8')};
 function sample(){
   if(fixture)return fixture;
   const params=new URLSearchParams(location.search),twisting=params.get('armor')==='twisting';
@@ -25,6 +26,21 @@ function sample(){
     rows.forEach((raw,index)=>{raw.itemHash=3229172222;raw.state=0;fixture.profile.itemComponents.sockets.data[raw.itemInstanceId]={sockets:
       [realArmor.statPlugs.Weapons,realArmor.statPlugs.Super,realArmor.statPlugs[index===1?'Class':'Health'],544009373].map(plugHash=>({plugHash,isEnabled:true}))};});
     if(params.has('blocked'))fixture.profile.itemComponents.sockets.data[rows[1].itemInstanceId].sockets.pop();
+  }
+  if(params.get('armor')==='exotic'){
+    fixture.defs=structuredClone(realExotics.defs);
+    const p=fixture.profile;p.characters.data['100'].classType=1;
+    p.profileInventory.data.items=[];p.characterInventories.data['100'].items=[];
+    p.itemComponents={sockets:{data:{}},instances:{data:{}},reusablePlugs:{data:{}}};
+    [0,0,1,1,1].forEach((sampleIndex,n)=>{
+      const s=realExotics.samples[sampleIndex],id='900719925474096'+String(101+n);
+      (n%2?p.characterInventories.data['100'].items:p.profileInventory.data.items).push({itemHash:s.itemHash,itemInstanceId:id,state:n===0||n===2?1:0});
+      p.itemComponents.sockets.data[id]={sockets:structuredClone(s.sockets)};
+      p.itemComponents.instances.data[id]={gearTier:s.gearTier,primaryStat:{value:550}};
+      p.itemComponents.reusablePlugs.data[id]={plugs:{}};
+      if(n===4)p.itemComponents.sockets.data[id].sockets[11].plugHash=3751917994;
+      if(n===1&&params.has('blocked'))p.itemComponents.sockets.data[id].sockets[6]={};
+    });
   }
   if(params.get('weapon')==='bane'){
     const {profile,defs}=fixture,multi='900719925474099101',single='900719925474099103';

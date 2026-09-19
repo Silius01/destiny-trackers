@@ -111,6 +111,17 @@
       const gearHash = def.equippingBlock?.gearsetItemHash;
       result.setNames = [defs.sets?.[setHash]?.displayProperties?.name,defs.items[gearHash]?.displayProperties?.name].filter(Boolean);
       result.archetype = active.find(p=>p.plug?.plugCategoryHash === 778194869)?.displayProperties?.name || '';
+      result.exoticPerks = [];
+      if (result.exotic && result.slot === 'Class Item') {
+        // Read the two actual trait sockets, never the definition's possible rolls.
+        const indexes = unique((def.sockets?.socketCategories || []).filter(c=>c.socketCategoryHash === 2518356196).flatMap(c=>c.socketIndexes));
+        result.exoticPerks = indexes.map(index=>{
+          const socket=sockets[index],plug=defs.items[socket?.plugHash];
+          return socket?.plugHash && socket.isVisible !== false && plug?.plug?.plugCategoryIdentifier === 'intrinsics' && plug.displayProperties?.name ?
+            {index,hash:socket.plugHash,name:plug.displayProperties.name} : null;
+        }).filter(Boolean).sort((a,b)=>a.index-b.index);
+        if (indexes.length !== 2 || result.exoticPerks.length !== 2) result.exoticPerkIssue='Both exotic class-item perks could not be identified';
+      }
       const base = {};
       const intrinsic = active.filter(p=>p.plug?.plugCategoryHash === 748854354 || p.plug?.plugCategoryIdentifier === 'intrinsics');
       for (const source of [def,...intrinsic]) {
@@ -191,36 +202,45 @@
         if (!groups.has(key)) groups.set(key,[]);
         groups.get(key).push(rankWeapon(item,weapon));
       } else {
+        let exoticMatch;
         if (item.exotic) {
           const exotic = catalog.combos.find(c=>c.isExotic && norm(c.name) === norm(item.name) && c.slot === item.slot);
-          if (exotic) { patches[exotic.id] = {owned:true,tertiaries:[]}; armorMatches.push({...item,recordId:exotic.id,tertiary:''}); }
-          else review.push({...item,reason:'Exotic is not in this catalog'});
-          continue;
+          if (!exotic) { review.push({...item,reason:'Exotic is not in this catalog'});continue; }
+          patches[exotic.id] = {owned:true,tertiaries:[]};
+          exoticMatch={...item,recordId:exotic.id,tertiary:'',ownershipOnly:true};
+          armorMatches.push(exoticMatch);
         }
         const arch = catalog.archetypes.find(a=>norm(a.name) === norm(item.archetype));
-        if (!arch) { review.push({...item,reason:'Armor 3.0 archetype could not be identified'}); continue; }
-        let possibleSets = catalog.sets.filter(s=>item.setNames.some(n=>norm(n) === norm(s.name)));
-        if (!possibleSets.length) possibleSets = catalog.sets.filter(s=>norm(item.name).startsWith(norm(s.name)+' '));
-        const mapped = mappings[item.itemHash];
-        const set = mapped ? catalog.sets.find(s=>s.name === mapped) : possibleSets.length === 1 ? possibleSets[0] : null;
-        if (!set) { review.push({...item,reason:'Choose the armor set',setOptions:catalog.sets}); continue; }
+        if (!arch) { review.push({...item,reason:'Armor 3.0 archetype could not be identified'+(item.exotic?'; ownership tracked, locks unchanged':'')}); continue; }
+        let set;
+        if (!item.exotic) {
+          let possibleSets = catalog.sets.filter(s=>item.setNames.some(n=>norm(n) === norm(s.name)));
+          if (!possibleSets.length) possibleSets = catalog.sets.filter(s=>norm(item.name).startsWith(norm(s.name)+' '));
+          const mapped = mappings[item.itemHash];
+          set = mapped ? catalog.sets.find(s=>s.name === mapped) : possibleSets.length === 1 ? possibleSets[0] : null;
+          if (!set) { review.push({...item,reason:'Choose the armor set',setOptions:catalog.sets}); continue; }
+        }
         const possibleStats = arch.tertiaryOptions.filter(s=>(item.baseStats[s] || 0)>0);
         if (possibleStats.length !== 1 || !(item.baseStats[arch.primary]>0) || !(item.baseStats[arch.secondary]>0)) {
           review.push({...item,reason:'Base tertiary stat is ambiguous; mods and tuning are excluded'}); continue;
         }
-        const combo = catalog.combos.find(c=>!c.isExotic && c.setName === set.name && c.slot === item.slot && c.archetype === arch.name);
+        const combo = exoticMatch ? {id:exoticMatch.recordId} : catalog.combos.find(c=>!c.isExotic && c.setName === set.name && c.slot === item.slot && c.archetype === arch.name);
         if (!combo) { review.push({...item,reason:'Set / slot / archetype is not in this catalog'}); continue; }
         const tertiary = possibleStats[0];
-        const patch = patches[combo.id] || {owned:false,tertiaries:[]};
-        patch.tertiaries = unique([...patch.tertiaries,tertiary]);
-        patch.owned = arch.tertiaryOptions.every(s=>patch.tertiaries.includes(s));
-        patches[combo.id] = patch;
+        if (!item.exotic) {
+          const patch = patches[combo.id] || {owned:false,tertiaries:[]};
+          patch.tertiaries = unique([...patch.tertiaries,tertiary]);
+          patch.owned = arch.tertiaryOptions.every(s=>patch.tertiaries.includes(s));
+          patches[combo.id] = patch;
+        }
         const baseTotal = Object.values(item.baseStats).reduce((sum,value)=>sum+value,0);
         const lockIssue = !item.className ? 'Armor class could not be identified' :
           !Number.isInteger(item.gearTier) || item.gearTier < 1 ? 'Gear tier could not be identified' :
-          Object.values(item.baseStats).some(value=>!Number.isFinite(value) || value<0) ? 'Base stat values could not be read safely' : '';
-        armorMatches.push({...item,recordId:combo.id,tertiary,tertiaryOptions:arch.tertiaryOptions,baseTotal,lockIssue,
-          score:[baseTotal,Number(item.locked),item.power]});
+          Object.values(item.baseStats).some(value=>!Number.isFinite(value) || value<0) ? 'Base stat values could not be read safely' : item.exoticPerkIssue || '';
+        const match={...item,recordId:combo.id,tertiary,tertiaryOptions:arch.tertiaryOptions,baseTotal,lockIssue,
+          ownershipOnly:false,score:[baseTotal,Number(item.locked),item.power]};
+        if (exoticMatch) Object.assign(exoticMatch,match);
+        else armorMatches.push(match);
       }
     }
     const weapons = [];
@@ -232,8 +252,9 @@
     }
     weapons.sort((a,b)=>a.winner.name.localeCompare(b.winner.name));
     const armorGroups = new Map();
-    for (const item of armorMatches.filter(i=>!i.exotic)) {
-      const groupId=JSON.stringify([item.itemHash,item.className,item.slot,item.archetype,item.tertiary,item.gearTier,item.artifice]);
+    for (const item of armorMatches.filter(i=>!i.ownershipOnly)) {
+      const groupId=JSON.stringify([item.itemHash,item.className,item.slot,item.archetype,item.tertiary,item.gearTier,item.artifice,
+        ...(item.exotic?[(item.exoticPerks || []).map(p=>[p.index,p.hash])]:[])]);
       if (!armorGroups.has(groupId)) armorGroups.set(groupId,[]);
       armorGroups.get(groupId).push(item);
     }
@@ -271,11 +292,11 @@
         .map(s=>({hash:s.statTypeHash,name:ARMOR_STATS[s.statTypeHash],value:s.value,conditional:!!s.isConditionallyActive}))});
     return result.items.filter(i=>i.kind==='armor' || i.kind==='unknown').map(item=>{
       const match=matched.get(item.id),group=planned.get(item.id),blockers=armorLockBlockers(result,item.itemHash);
-      const decision=review.has(item.id)?'review':match?.exotic?'ownership-only':!group?'blocked':
+      const decision=review.has(item.id)?'review':match?.ownershipOnly?'ownership-only':!group?'blocked':
         item.id===group.keeper.id?(item.locked?'keep-locked':'lock'):(item.locked?'unlock':'duplicate-already-unlocked');
       return {instanceId:item.id,itemHash:item.itemHash,name:item.name,location:item.location,locked:item.locked,
         className:item.className,slot:item.slot,setNames:item.setNames,archetype:item.archetype,tertiary:match?.tertiary || null,
-        baseStats:item.baseStats,gearTier:item.gearTier,artifice:item.artifice,catalogId:match?.recordId,keeper:group?.keeper.id,
+        baseStats:item.baseStats,gearTier:item.gearTier,artifice:item.artifice,exotic:item.exotic,exoticPerks:item.exoticPerks,catalogId:match?.recordId,keeper:group?.keeper.id,
         decision,reason:review.get(item.id) || match?.lockIssue || null,blockers,missingDefinitions:item.missingDefinitions || [],
         definitionStats:statSource(item.def),sockets:(profile.itemComponents?.sockets?.data?.[item.id]?.sockets || []).map((s,index)=>({
           index,plugHash:s.plugHash,isEnabled:s.isEnabled,isVisible:s.isVisible,...statSource(defs.items[s.plugHash])}))};
@@ -373,6 +394,9 @@
         const matches=result.armorMatches.filter(i=>i.recordId===key);
         if (matches[0]?.tertiaryOptions?.every(stat=>value.tertiaries.includes(stat))) value.owned=true;
         value.scan={instanceIds:matches.map(i=>i.id),at:result.scannedAt};
+        if (matches.some(i=>i.exotic)) value.scan.armorRolls=result.armor.filter(g=>g.recordId===key).map(g=>({
+          className:g.winner.className,archetype:g.winner.archetype,tertiary:g.winner.tertiary,gearTier:g.winner.gearTier,
+          artifice:g.winner.artifice,exoticPerks:g.winner.exoticPerks || [],instanceIds:g.copies.map(i=>i.id)}));
       }
       value.scan={...value.scan,source:'bungie',before};
       next[key]=value;

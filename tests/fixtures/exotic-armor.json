@@ -1,0 +1,1069 @@
+{
+  "source": "Bungie item definitions and DIM public profile-2026-06-09.json; only socket/stat shapes retained, no account or instance IDs.",
+  "samples": [
+    {
+      "itemHash": 89619507,
+      "sockets": [
+        {
+          "plugHash": 1980618587,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3820147479,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3820147479,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3820147479,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 4248210736,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 2024015888,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3349393475,
+          "isEnabled": true,
+          "isVisible": false
+        },
+        {
+          "plugHash": 446078514,
+          "isEnabled": true,
+          "isVisible": false
+        },
+        {
+          "plugHash": 465064631,
+          "isEnabled": true,
+          "isVisible": false
+        },
+        {
+          "plugHash": 2041822466,
+          "isEnabled": true,
+          "isVisible": false
+        },
+        {
+          "plugHash": 702981643,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3663096260,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "plugHash": 2121121504,
+          "isEnabled": true,
+          "isVisible": true
+        }
+      ],
+      "gearTier": 5
+    },
+    {
+      "itemHash": 2809120022,
+      "sockets": [
+        {
+          "plugHash": 1980618587,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3200810407,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3200810407,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3200810407,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 4248210736,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 2024015890,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 2121121504,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "plugHash": 3751917999,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 1476923957,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 2230428468,
+          "isEnabled": true,
+          "isVisible": false
+        },
+        {
+          "plugHash": 702981643,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 1656746282,
+          "isEnabled": true,
+          "isVisible": false
+        },
+        {
+          "plugHash": 2498433744,
+          "isEnabled": true,
+          "isVisible": false
+        }
+      ],
+      "gearTier": 5
+    },
+    {
+      "itemHash": 2809120022,
+      "sockets": [
+        {
+          "plugHash": 1980618587,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3200810407,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3200810407,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3200810407,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 4248210736,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 2024015888,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 2121121504,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "plugHash": 1476923954,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 1476923957,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 1807652646,
+          "isEnabled": true,
+          "isVisible": false
+        },
+        {
+          "plugHash": 702981643,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 1656746282,
+          "isEnabled": true,
+          "isVisible": false
+        },
+        {
+          "plugHash": 1370696622,
+          "isEnabled": true,
+          "isVisible": false
+        }
+      ],
+      "gearTier": 5
+    },
+    {
+      "itemHash": 2809120022,
+      "sockets": [
+        {
+          "plugHash": 1980618587,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3200810407,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3200810407,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3200810407,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 4248210736,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 2024015888,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 2121121504,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "isEnabled": false,
+          "isVisible": false
+        },
+        {
+          "plugHash": 3751917995,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 3751917993,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 2937665788,
+          "isEnabled": true,
+          "isVisible": false
+        },
+        {
+          "plugHash": 702981643,
+          "isEnabled": true,
+          "isVisible": true
+        },
+        {
+          "plugHash": 1656746282,
+          "isEnabled": true,
+          "isVisible": false
+        },
+        {
+          "plugHash": 2041822466,
+          "isEnabled": true,
+          "isVisible": false
+        }
+      ],
+      "gearTier": 5
+    }
+  ],
+  "defs": {
+    "items": {
+      "1370696619": {
+        "hash": 1370696619,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 144602215,
+            "value": 25,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": ""
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_stats",
+          "plugCategoryHash": 748854354
+        }
+      },
+      "1370696622": {
+        "hash": 1370696622,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 144602215,
+            "value": 20,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": ""
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_stats",
+          "plugCategoryHash": 748854354
+        }
+      },
+      "1476923954": {
+        "hash": 1476923954,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 2996146975,
+            "value": 30,
+            "isConditionallyActive": false
+          },
+          {
+            "statTypeHash": 1735777505,
+            "value": 25,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 6
+        },
+        "displayProperties": {
+          "name": "Spirit of the Ophidian"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "intrinsics",
+          "plugCategoryHash": 1744546145
+        }
+      },
+      "1476923956": {
+        "hash": 1476923956,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 6
+        },
+        "displayProperties": {
+          "name": "Spirit of Synthoceps"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "intrinsics",
+          "plugCategoryHash": 1744546145
+        }
+      },
+      "1476923957": {
+        "hash": 1476923957,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 6
+        },
+        "displayProperties": {
+          "name": "Spirit of Verity"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "intrinsics",
+          "plugCategoryHash": 1744546145
+        }
+      },
+      "1656746282": {
+        "hash": 1656746282,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 2
+        },
+        "displayProperties": {
+          "name": "Locked Artifice Socket"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "enhancements.artifice.exotic",
+          "plugCategoryHash": 1934732343
+        }
+      },
+      "1807652646": {
+        "hash": 1807652646,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": "Gunner"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_archetypes",
+          "plugCategoryHash": 778194869
+        }
+      },
+      "1980618587": {
+        "hash": 1980618587,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 2
+        },
+        "displayProperties": {
+          "name": "Empty Mod Socket"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "enhancements.v2_general",
+          "plugCategoryHash": 2487827355
+        }
+      },
+      "2024015888": {
+        "hash": 2024015888,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 16120457,
+            "value": 10,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 5
+        },
+        "displayProperties": {
+          "name": "Upgrade Armor"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "v460.plugs.armor.masterworks",
+          "plugCategoryHash": 2198080209
+        }
+      },
+      "2024015890": {
+        "hash": 2024015890,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 16120457,
+            "value": 10,
+            "isConditionallyActive": false
+          },
+          {
+            "statTypeHash": 2996146975,
+            "value": 2,
+            "isConditionallyActive": true
+          },
+          {
+            "statTypeHash": 392767087,
+            "value": 2,
+            "isConditionallyActive": true
+          },
+          {
+            "statTypeHash": 1735777505,
+            "value": 2,
+            "isConditionallyActive": true
+          },
+          {
+            "statTypeHash": 144602215,
+            "value": 2,
+            "isConditionallyActive": true
+          },
+          {
+            "statTypeHash": 1943323491,
+            "value": 2,
+            "isConditionallyActive": true
+          },
+          {
+            "statTypeHash": 4244567218,
+            "value": 2,
+            "isConditionallyActive": true
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 5
+        },
+        "displayProperties": {
+          "name": "Upgrade Armor"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "v460.plugs.armor.masterworks",
+          "plugCategoryHash": 2198080209
+        }
+      },
+      "2041822466": {
+        "hash": 2041822466,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 2996146975,
+            "value": 20,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": ""
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_stats",
+          "plugCategoryHash": 748854354
+        }
+      },
+      "2121121504": {
+        "hash": 2121121504,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 2
+        },
+        "displayProperties": {
+          "name": "Empty Tuning Mod Socket"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "core.gear_systems.armor_tiering.plugs.tuning.mods",
+          "plugCategoryHash": 3481777685
+        }
+      },
+      "2230428468": {
+        "hash": 2230428468,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": "Specialist"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_archetypes",
+          "plugCategoryHash": 778194869
+        }
+      },
+      "2498433744": {
+        "hash": 2498433744,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 1735777505,
+            "value": 20,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": ""
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_stats",
+          "plugCategoryHash": 748854354
+        }
+      },
+      "2515211331": {
+        "hash": 2515211331,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 1735777505,
+            "value": 30,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": ""
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_stats",
+          "plugCategoryHash": 748854354
+        }
+      },
+      "2809120022": {
+        "hash": 2809120022,
+        "itemType": 2,
+        "classType": 1,
+        "investmentStats": [
+          {
+            "statTypeHash": 3897883278,
+            "value": 0,
+            "isConditionallyActive": false
+          },
+          {
+            "statTypeHash": 1935470627,
+            "value": 0,
+            "isConditionallyActive": false
+          },
+          {
+            "statTypeHash": 1885944937,
+            "value": 0,
+            "isConditionallyActive": false
+          },
+          {
+            "statTypeHash": 765379354,
+            "value": 0,
+            "isConditionallyActive": true
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 1585787867,
+          "tierType": 6
+        },
+        "sockets": {
+          "socketCategories": [
+            {
+              "socketCategoryHash": 590099826,
+              "socketIndexes": [
+                0,
+                1,
+                2,
+                3,
+                5,
+                6,
+                14
+              ]
+            },
+            {
+              "socketCategoryHash": 1926152773,
+              "socketIndexes": [
+                4,
+                13
+              ]
+            },
+            {
+              "socketCategoryHash": 2518356196,
+              "socketIndexes": [
+                10,
+                11
+              ]
+            },
+            {
+              "socketCategoryHash": 3154740035,
+              "socketIndexes": [
+                12,
+                15
+              ]
+            }
+          ]
+        },
+        "displayProperties": {
+          "name": "Relativism"
+        }
+      },
+      "2937665788": {
+        "hash": 2937665788,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": "Grenadier"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_archetypes",
+          "plugCategoryHash": 778194869
+        }
+      },
+      "3200810407": {
+        "hash": 3200810407,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 2
+        },
+        "displayProperties": {
+          "name": "Empty Mod Socket"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "enhancements.v2_class_item",
+          "plugCategoryHash": 912441879
+        }
+      },
+      "3349393475": {
+        "hash": 3349393475,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": "Brawler"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_archetypes",
+          "plugCategoryHash": 778194869
+        }
+      },
+      "3663096260": {
+        "hash": 3663096260,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 6
+        },
+        "displayProperties": {
+          "name": "Skittering Stinger"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "intrinsics",
+          "plugCategoryHash": 1744546145
+        }
+      },
+      "3751917993": {
+        "hash": 3751917993,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 6
+        },
+        "displayProperties": {
+          "name": "Spirit of the Gyrfalcon"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "intrinsics",
+          "plugCategoryHash": 1744546145
+        }
+      },
+      "3751917994": {
+        "hash": 3751917994,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 6
+        },
+        "displayProperties": {
+          "name": "Spirit of the Cyrtarachne"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "intrinsics",
+          "plugCategoryHash": 1744546145
+        }
+      },
+      "3751917995": {
+        "hash": 3751917995,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 1735777505,
+            "value": 30,
+            "isConditionallyActive": false
+          },
+          {
+            "statTypeHash": 144602215,
+            "value": 25,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 6
+        },
+        "displayProperties": {
+          "name": "Spirit of Renewal"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "intrinsics",
+          "plugCategoryHash": 1744546145
+        }
+      },
+      "3751917999": {
+        "hash": 3751917999,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 1943323491,
+            "value": 30,
+            "isConditionallyActive": false
+          },
+          {
+            "statTypeHash": 2996146975,
+            "value": 25,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 6
+        },
+        "displayProperties": {
+          "name": "Spirit of the Dragon"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "intrinsics",
+          "plugCategoryHash": 1744546145
+        }
+      },
+      "3820147479": {
+        "hash": 3820147479,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 2
+        },
+        "displayProperties": {
+          "name": "Empty Mod Socket"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "enhancements.v2_arms",
+          "plugCategoryHash": 3422420680
+        }
+      },
+      "4248210736": {
+        "hash": 4248210736,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 2
+        },
+        "displayProperties": {
+          "name": "Default Shader"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "shader",
+          "plugCategoryHash": 2973005342
+        }
+      },
+      "446078514": {
+        "hash": 446078514,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 4244567218,
+            "value": 30,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": ""
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_stats",
+          "plugCategoryHash": 748854354
+        }
+      },
+      "465064631": {
+        "hash": 465064631,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [
+          {
+            "statTypeHash": 392767087,
+            "value": 25,
+            "isConditionallyActive": false
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 2422292810,
+          "tierType": 0
+        },
+        "displayProperties": {
+          "name": ""
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_stats",
+          "plugCategoryHash": 748854354
+        }
+      },
+      "702981643": {
+        "hash": 702981643,
+        "itemType": 19,
+        "classType": 3,
+        "investmentStats": [],
+        "inventory": {
+          "bucketTypeHash": 3313201758,
+          "tierType": 2
+        },
+        "displayProperties": {
+          "name": "Default Ornament"
+        },
+        "plug": {
+          "plugCategoryIdentifier": "armor_skins_empty",
+          "plugCategoryHash": 3356843615
+        }
+      },
+      "89619507": {
+        "hash": 89619507,
+        "itemType": 2,
+        "classType": 1,
+        "investmentStats": [
+          {
+            "statTypeHash": 3897883278,
+            "value": 0,
+            "isConditionallyActive": false
+          },
+          {
+            "statTypeHash": 1935470627,
+            "value": 0,
+            "isConditionallyActive": false
+          },
+          {
+            "statTypeHash": 1885944937,
+            "value": 0,
+            "isConditionallyActive": false
+          },
+          {
+            "statTypeHash": 765379354,
+            "value": 0,
+            "isConditionallyActive": true
+          }
+        ],
+        "inventory": {
+          "bucketTypeHash": 3551918588,
+          "tierType": 6
+        },
+        "sockets": {
+          "socketCategories": [
+            {
+              "socketCategoryHash": 590099826,
+              "socketIndexes": [
+                0,
+                1,
+                2,
+                3,
+                5,
+                14
+              ]
+            },
+            {
+              "socketCategoryHash": 1926152773,
+              "socketIndexes": [
+                4,
+                10
+              ]
+            },
+            {
+              "socketCategoryHash": 3154740035,
+              "socketIndexes": [
+                6,
+                7,
+                8,
+                9,
+                11
+              ]
+            }
+          ]
+        },
+        "displayProperties": {
+          "name": "Athrys's Embrace"
+        }
+      }
+    },
+    "stats": {},
+    "sets": {}
+  }
+}
