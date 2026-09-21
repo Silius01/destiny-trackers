@@ -55,6 +55,16 @@ function sample(){
     defs.items[778]={displayProperties:{name:'Enhanced Destabilizing Rounds'},plug:{plugCategoryHash:100}};
     profile.itemComponents.reusablePlugs.data[multi]={plugs:{2:[{plugItemHash:777,canInsert:true,enabled:true},{plugItemHash:778,canInsert:true,enabled:true}]}};
   }
+  if(params.has('delta') && location.pathname.includes('armor')){
+    const p=fixture.profile,source=p.profileInventory.data.items[0];
+    for(let n=0;n<2;n++){
+      const id='900719925474098'+String(201+n);
+      p.profileInventory.data.items.push({...source,itemInstanceId:id,state:0});
+      p.itemComponents.instances.data[id]=structuredClone(p.itemComponents.instances.data[source.itemInstanceId]);
+      p.itemComponents.sockets.data[id]=structuredClone(p.itemComponents.sockets.data[source.itemInstanceId]);
+      if(n===1)p.itemComponents.instances.data[id].gearTier=7;
+    }
+  }
   if(params.has('missing')){const socket=fixture.profile.itemComponents.sockets.data['900719925474099103'].sockets[2];delete fixture.defs.items[socket.plugHash];}
   return fixture;
 }
@@ -69,6 +79,11 @@ if(new URLSearchParams(location.search).has('aged')){
 if(new URLSearchParams(location.search).has('storage-fail')){
   const setItem=Storage.prototype.setItem;
   Storage.prototype.setItem=function(key,value){if(key==='qa-armorVaultRecords')throw new Error('Browser storage is full (synthetic test).');return setItem.call(this,key,value);};
+}
+if(new URLSearchParams(location.search).has('scan-fail'))VaultBungie.client=()=>({profile:async()=>{throw new Error('Synthetic inventory read failure');}});
+if(new URLSearchParams(location.search).has('history-fail')){
+  const setItem=Storage.prototype.setItem;
+  Storage.prototype.setItem=function(key,value){if(key.includes('-last-scan-'))throw new Error('Synthetic history write failure');return setItem.call(this,key,value);};
 }
 document.title='LOCAL QA — '+document.title;
 document.addEventListener('DOMContentLoaded',()=>{const notice=document.createElement('p');notice.textContent='LOCAL QA: synthetic inventory, no Bungie requests';document.body.prepend(notice);});

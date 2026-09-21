@@ -8,6 +8,7 @@
     const kind=adapter.catalog.kind,api=VaultBungie,core=VaultScanCore,key=adapter.storageKey;
     let profile,defs,result,client,accounts=[],busy=false,demo=false,keepers={},lastReport=null,savedScan=false;
     let mappings=read('vaultBungieMappings-'+kind,{});
+    let comparisonBase=null,scanChanges=null;
     const dialog=h('dialog',undefined,'bungie-dialog');
     const header=h('header');header.append(h('h2',kind==='weapon'?'Scan weapons':'Scan armor'),button('Close',()=>dialog.close()));
     const body=h('div',undefined,'scan-body');dialog.append(header,body);document.body.append(dialog);
@@ -68,16 +69,46 @@
       // A first manifest download can outlast the freshness window. Grade a new
       // inventory snapshot after the download instead of failing on the old one.
       if(Date.now()-Date.parse(profile.responseMintedTimestamp)>60000){status('Refreshing inventory after the definition download…');profile=await client.profile();}
-      analyze();
+      analyze(true);
     }
     async function scanSample(){
-      demo=true;const sample=root.VaultScanExample(adapter.catalog);profile=sample.profile;defs=sample.defs;analyze();
+      demo=true;const sample=root.VaultScanExample(adapter.catalog);profile=sample.profile;defs=sample.defs;analyze(true);
     }
-    function analyze(){keepers={};savedScan=false;viewSaved.hidden=true;result=core.scan(profile,defs,adapter.catalog,mappings);render();status(demo?'Example only — this cannot save to your checklist or change game locks.':'Scan complete. Review the copies and proposed changes below.');}
+    function analyze(newScan=false){
+      keepers={};savedScan=false;viewSaved.hidden=true;result=core.scan(profile,defs,adapter.catalog,mappings);
+      const snapshot=kind==='armor'?core.armorScanSnapshot(result):null;
+      const historyKey=snapshot?.account?key+'-last-scan-'+snapshot.membershipType+'-'+snapshot.account:null;
+      if(newScan)comparisonBase=!demo && historyKey?read(historyKey,null):null;
+      scanChanges=snapshot?core.compareArmorScans(snapshot,comparisonBase):null;
+      render();
+      let warning='';
+      if(snapshot && !demo){
+        try{if(!historyKey)throw new Error();localStorage.setItem(historyKey,JSON.stringify(snapshot));}
+        catch{warning=' This scan could not be remembered in this browser; the next comparison will use the last remembered scan.';}
+      }
+      status(demo?'Example only — this cannot save to your checklist or change game locks.':
+        (kind==='armor'?armorChangeText():'Scan complete. Review the copies and proposed changes below.')+warning,!!warning);
+    }
+    function armorChangeText(){
+      if(!scanChanges)return 'First scan for comparison. Future scans will show what changed since this scan.';
+      return 'Since the last scan: '+count(scanChanges.newCombinations,'new armor combination')+', '+
+        count(scanChanges.newCopies,'new copy','new copies')+', '+count(scanChanges.removedCopies,'copy','copies')+' no longer present.'+
+        (scanChanges.removedCombinations?' '+count(scanChanges.removedCombinations,'combination')+' no longer matched.':'');
+    }
     function stat(value,label){const box=h('div',undefined,'scan-stat');box.append(h('b',String(value)),h('small',label));return box;}
     function render(){
       report.replaceChildren();const plan=core.lockPlan(result,keepers);
-      const stats=h('div',undefined,'scan-stats');stats.append(stat(result.items.filter(i=>i.kind===kind).length,'copies checked'),stat(Object.keys(result.patches).length,'checklist entries matched'),stat(result.review.length,'copies needing review'));report.append(stats);
+      const stats=h('div',undefined,'scan-stats');stats.append(stat(result.items.filter(i=>i.kind===kind).length,'copies checked'),stat(Object.keys(result.patches).length,'checklist entries matched'),stat(result.review.length,'copies needing review'));
+      if(kind==='armor'){
+        report.append(h('h3',demo?'Example inventory':scanChanges?'Changes since your last scan':'First scan for comparison'));
+        if(scanChanges){
+          const changes=h('div',undefined,'scan-stats');changes.append(stat(scanChanges.newCombinations,'new combinations'),stat(scanChanges.newCopies,'new copies'),stat(scanChanges.removedCopies,'copies no longer present'));report.append(changes);
+          report.append(h('small','Compared with '+new Date(scanChanges.since).toLocaleString()+'. New copies include duplicates; a combination uses the same distinctions as the keeper groups below.'));
+          if(scanChanges.removedCombinations)report.append(h('p',count(scanChanges.removedCombinations,'combination')+' no longer matched. Check the review list for unreadable rolls.'));
+        }else report.append(h('p',demo?'Example scans do not replace your last inventory comparison.':'This scan establishes the comparison. Scan again to see new combinations and copies, including after a reload.'));
+        const totals=h('details');totals.append(h('summary','Inventory totals and review counts'),stats,h('small',count(result.armor.length,'armor combination')+' currently matched'));report.append(totals);
+        if(result.review.length)report.append(h('p',count(result.review.length,'copy','copies')+' need review below.','scan-warning'));
+      }else report.append(stats);
       if(kind==='weapon'){
         report.append(h('h3','Best copy for each tracked weapon'),h('p','Keepers prioritize matching both main perk columns, then the number of recommended choices on that copy. A Good roll with more main-perk choices can rank above a God roll with fewer choices.'));
         const choicesText=copy=>'Recommended main-perk choices: '+copy.perkCounts[2]+' + '+copy.perkCounts[3]+' = '+copy.mainPerkChoices;
@@ -138,12 +169,13 @@
           backup();status('Rechecking inventory and locking the selected copies…');
           // Clear the preview even after partial failure. A new scan is required to retry.
           const current=result;
-          try{await core.executeLocks(plan,client,current,done=>status(done.length+' lock changes applied…'));await saveScan(false);lastReport.lockResult={status:'verified'};status('Checklist saved. Keeper locks and duplicate unlocks verified.');}
+          try{await core.executeLocks(plan,client,current,done=>status(done.length+' lock changes applied…'));await saveScan(false);lastReport.lockResult={status:'verified'};status('Checklist saved. '+(kind==='armor'?armorChangeText()+' ':'')+'Keeper locks and duplicate unlocks verified.');}
           catch(error){lastReport.lockResult={status:'failed',message:error.message,completed:error.completed || []};throw error;}
           finally{result=null;report.replaceChildren();}
         }),'primary');apply.dataset.apply='';apply.dataset.empty=String(changes===0);actions.append(apply);
       }
       lastReport={version:3,kind,at:result.scannedAt,account:result.account,
+        ...(kind==='armor'?{changesSinceLastScan:scanChanges}:{}),
         weapons:result.weapons.map(g=>({catalogId:g.recordId,keeper:g.winner.id,tier:g.winner.tier,perks:g.winner.perks,perkCounts:g.winner.perkCounts,mainColumnsMatched:g.winner.mainColumnsMatched,mainPerkChoices:g.winner.mainPerkChoices,duplicates:g.copies.slice(1).map(i=>i.id)})),
         armor:result.armorMatches.map(i=>({instanceId:i.id,recordId:i.recordId,itemHash:i.itemHash,className:i.className,archetype:i.archetype,tertiary:i.tertiary,gearTier:i.gearTier,artifice:i.artifice,exotic:i.exotic,exoticPerks:i.exoticPerks,ownershipOnly:i.ownershipOnly,baseStats:i.baseStats,location:i.location,locked:i.locked,lockIssue:i.lockIssue})),
         ...(kind==='weapon'?{weaponCopies:core.weaponDiagnostics(result,profile,defs)}:{armorCopies:core.armorDiagnostics(result,profile,defs,keepers)}),
@@ -161,11 +193,11 @@
       await adapter.replaceRecords(records);savedScan=true;
       const save=report.querySelector('[data-save]');if(save)save.textContent='Saved to checklist';
       viewSaved.hidden=!adapter.showSavedRecords;
-      const patches=Object.values(result.patches),rolls=patches.reduce((n,p)=>n+(p.tertiaries?.length || 0),0);
-      const exoticRolls=result.armor.filter(g=>g.winner.exotic).length;
-      const details=kind==='armor'?[rolls?count(rolls,'legendary tertiary roll'):'',exoticRolls?count(exoticRolls,'exotic roll combination'):''].filter(Boolean).join(' and '):'';
-      status('Saved '+count(patches.length,'checklist entry','checklist entries')+(details?' with '+details:'')+'.'+
-        (kind==='armor'?' Legendary Farmed checkboxes require all four tertiary variants; exotic checkboxes show ownership.':'')+' A backup of the previous marks is available below.');
+      if(kind==='armor'){
+        status('Checklist saved. '+armorChangeText()+' Legendary Farmed checkboxes require all four tertiary variants; exotic checkboxes show ownership. A backup of the previous marks is available below.');
+        return;
+      }
+      status('Saved '+count(Object.keys(result.patches).length,'checklist entry','checklist entries')+'. A backup of the previous marks is available below.');
     }
     function download(data,name){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=h('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
     if(api.connected()){connection.open=false;}else{connection.open=true;}

@@ -380,6 +380,22 @@
       throw error;
     }
   }
+  // Only inventory identities belong in the comparison. Moves, locks, Power,
+  // duplicate counts and keeper choices do not create another roll combination.
+  function armorScanSnapshot(result) {
+    return {version:1,account:String(result.account || ''),membershipType:result.membershipType,
+      scannedAt:result.scannedAt,combinations:unique(result.armor.map(g=>g.groupId)),
+      copies:unique(result.items.filter(i=>i.kind==='armor').map(i=>i.id))};
+  }
+  function compareArmorScans(current,previous) {
+    const valid=value=>value?.version===1 && value.account && Number.isFinite(Date.parse(value.scannedAt)) &&
+      ['combinations','copies'].every(key=>Array.isArray(value[key]) && value[key].every(id=>typeof id==='string'));
+    if(!valid(previous) || previous.account!==current.account || previous.membershipType!==current.membershipType)return null;
+    const added=(a,b)=>{const known=new Set(b);return unique(a).filter(id=>!known.has(id)).length;};
+    return {since:previous.scannedAt,newCombinations:added(current.combinations,previous.combinations),
+      removedCombinations:added(previous.combinations,current.combinations),
+      newCopies:added(current.copies,previous.copies),removedCopies:added(previous.copies,current.copies)};
+  }
   function applyRecords(records,result,normalize) {
     const next={...records};
     // Replace the previous scan layer while retaining marks made manually before it.
@@ -403,5 +419,5 @@
     }
     return next;
   }
-  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,scan,lockPlan,validatePlan,executeLocks,weaponRecord,applyRecords,weaponDiagnostics,armorDiagnostics,armorLockBlockers};
+  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,scan,lockPlan,validatePlan,executeLocks,weaponRecord,applyRecords,weaponDiagnostics,armorDiagnostics,armorLockBlockers,armorScanSnapshot,compareArmorScans};
 });
