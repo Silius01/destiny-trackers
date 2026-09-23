@@ -2,7 +2,7 @@ const fs=require('node:fs'),path=require('node:path');
 const repo=path.join(__dirname,'../..');
 for(const kind of ['weapon','armor']){
  let html=fs.readFileSync(path.join(repo,kind+'-vault.html'),'utf8');
- html=html.replaceAll('src="bungie-','src="../../bungie-').replace('href="bungie-ui.css"','href="../../bungie-ui.css"');
+ html=html.replaceAll('src="bungie-','src="../../bungie-').replace('href="bungie-ui.css','href="../../bungie-ui.css');
  html=html.replace(/<script src="\.\.\/\.\.\/bungie-ui\.js[^\"]*">/,'<script src="mock-runtime.js"></script>$&');
  const build=Date.now();
  html=html.replace(/(src|href)="([^\"]+\.(?:js|css))(?:\?[^\"]*)?"/g,(_,attribute,url)=>attribute+'="'+url+'?qa='+build+'"');
@@ -65,6 +65,11 @@ function sample(){
       if(n===1)p.itemComponents.instances.data[id].gearTier=7;
     }
   }
+  if(params.get('review')==='origin'){
+    const origin=fixture.profile.itemComponents.sockets.data['900719925474099103'].sockets[4].plugHash;
+    fixture.defs.items[origin].displayProperties.name='Different origin (QA)';
+  }
+  if(params.get('review')==='unknown')fixture.defs.items[111].displayProperties.name='Unlisted QA weapon';
   if(params.has('missing')){const socket=fixture.profile.itemComponents.sockets.data['900719925474099103'].sockets[2];delete fixture.defs.items[socket.plugHash];}
   return fixture;
 }

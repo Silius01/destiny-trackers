@@ -150,6 +150,29 @@
     return options;
   }
 
+  // Review guidance is display-only. Same-name fallbacks must never become
+  // catalog mappings or authorize an automatic keeper/duplicate decision.
+  function weaponReviewRolls(item, catalog) {
+    if(item.kind!=='weapon')return [];
+    const compatible=weaponOptions({...item,origin:item.origin || []},catalog);
+    const candidates=compatible.length?compatible:catalog.filter(w=>weaponName(w.name)===weaponName(item.name));
+    const row=(label,recommended,actual,normalize=norm)=>({label,recommended,actual,
+      matches:recommended.filter(p=>actual.some(a=>normalize(a)===normalize(p)))});
+    return candidates.map(weapon=>{
+      const warnings=[];
+      if(norm(item.element)!==norm(weapon.element))warnings.push('Damage type differs or could not be read.');
+      if(weapon.origin && !(item.origin || []).some(o=>norm(o)===norm(weapon.origin)))
+        warnings.push(item.origin?.length?'Origin trait differs.':'Origin trait could not be confirmed.');
+      if(candidates.length>1)warnings.push('Multiple catalog versions: check the source, frame, and origin.');
+      if(!compatible.includes(weapon))warnings.push('Same-name reference only; this version was not matched.');
+      const columns=Array.from({length:4},(_,n)=>row('Column '+(n+1),weapon.rollCols?.[n] || [],item.columns?.[n] || []));
+      if(columns.some(c=>!c.recommended.length))warnings.push('This catalog recommendation is incomplete.');
+      return {weapon,warnings,rows:[...columns,
+        row('Priority stat',weapon.statFocus?[weapon.statFocus]:[],item.focusStats || [],statName),
+        row('Origin trait',weapon.origin?[weapon.origin]:[],item.origin || [])]};
+    });
+  }
+
   function rankWeapon(item, weapon) {
     const perks = weapon.rollCols.map((recommended,c)=>recommended.filter(p=>item.columns[c].some(actual=>norm(actual) === norm(p))));
     const matches = perks.map(p=>p.length > 0);
@@ -443,5 +466,5 @@
     }
     return next;
   }
-  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,scan,lockPlan,validatePlan,executeLocks,weaponRecord,applyRecords,weaponDiagnostics,armorDiagnostics,armorLockBlockers,armorScanSnapshot,compareArmorScans};
+  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,weaponReviewRolls,scan,lockPlan,validatePlan,executeLocks,weaponRecord,applyRecords,weaponDiagnostics,armorDiagnostics,armorLockBlockers,armorScanSnapshot,compareArmorScans};
 });

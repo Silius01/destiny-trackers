@@ -96,7 +96,40 @@
         (scanChanges.removedCombinations?' '+count(scanChanges.removedCombinations,'combination')+' no longer matched.':'');
     }
     function stat(value,label){const box=h('div',undefined,'scan-stat');box.append(h('b',String(value)),h('small',label));return box;}
+    function weaponReviewComparison(item){
+      const section=h('section',undefined,'scan-roll-review'),rolls=core.weaponReviewRolls(item,adapter.catalog.weapons);
+      section.append(h('h3','Recommended god roll'));
+      if(!rolls.length){
+        section.append(h('p','No recommended roll is saved for this weapon in Weapon Vault. Use the lookup below to check its perks before deciding.'));
+        item.columns?.forEach((column,n)=>section.append(h('small','This copy · column '+(n+1)+': '+(column.join(' / ') || 'Not confirmed'))));
+        section.append(h('small','Origin read: '+(item.origin?.join(' / ') || 'Not confirmed')),h('small','Priority stat read: '+(item.focusStats?.join(' / ') || 'Not confirmed')));
+      }else{
+        section.append(h('small','From the Weapon Vault catalog. Target one listed option per column, plus the priority stat and origin. ✓ marks a recommendation found on this physical copy.'));
+        for(const roll of rolls){
+          const card=h('div',undefined,'scan-roll-card'),w=roll.weapon;
+          card.append(h('b',w.name),h('small',[w.element,w.archetype,w.source].filter(Boolean).join(' · ')));
+          for(const warning of roll.warnings)card.append(h('p',warning,'scan-warning'));
+          const wrap=h('div',undefined,'scan-table-wrap'),table=h('table'),caption=h('caption','Recommended perks compared with this copy'),head=h('thead'),tr=h('tr');
+          for(const label of ['Slot','Recommended','This copy'])tr.append(h('th',label));head.append(tr);table.append(caption,head);
+          const body=h('tbody');
+          for(const comparison of roll.rows){
+            const row=h('tr'),target=h('td'),actual=h('td');
+            if(!comparison.recommended.length)target.append(h('small',comparison.label==='Origin trait'?'No origin required':'No recommendation saved'));
+            for(const perk of comparison.recommended){const matched=comparison.matches.includes(perk);target.append(h('span',(matched?'✓ ':'')+perk,'scan-perk'+(matched?' matched':'')));}
+            actual.textContent=comparison.actual.join(' / ') || 'Not confirmed';
+            row.append(h('th',comparison.label),target,actual);body.append(row);
+          }
+          table.append(body);wrap.append(table);card.append(wrap);
+          if(w.recommendedMod)card.append(h('small','Suggested mod: '+w.recommendedMod));
+          if(w.notes)card.append(h('p',w.notes));
+          section.append(card);
+        }
+      }
+      if(/^\d+$/.test(String(item.itemHash))){const lookup=h('a','Look up this weapon on light.gg ↗');lookup.href='https://www.light.gg/db/items/'+item.itemHash+'/';lookup.target='_blank';lookup.rel='noopener noreferrer';section.append(lookup);}
+      return section;
+    }
     function render(){
+      const reviewOpen=report.querySelector('[data-review]')?.open || false;
       report.replaceChildren();const plan=core.lockPlan(result,keepers);
       // Manual keep/don't-keep flags on review copies become lock/unlock actions.
       for(const [rid,decision] of Object.entries(reviewDecisions)){
@@ -163,16 +196,19 @@
         const exotics=result.armorMatches.filter(i=>i.ownershipOnly);
         if(exotics.length){const details=h('details');details.append(h('summary',count(exotics.length,'exotic copy','exotic copies')+' · ownership tracked, roll needs review'));for(const copy of exotics)details.append(h('p',copy.name+' · '+copy.className+' · '+copy.location+' · '+copy.id),h('small','Locks unchanged: '+(result.review.find(i=>i.id===copy.id)?.reason || 'Roll could not be read')));report.append(details);}
       }
-      if(result.review.length){const review=h('details');review.append(h('summary','Review '+result.review.length+' unmatched or ambiguous copies'));
+      if(result.review.length){const review=h('details');review.dataset.review='';review.open=reviewOpen;review.append(h('summary','Review '+result.review.length+' unmatched or ambiguous copies'));
         const seen=new Set();for(const item of result.review){const reviewKey=item.id;if(seen.has(reviewKey))continue;seen.add(reviewKey);const row=h('div',undefined,'scan-item');row.append(h('b',item.name),h('small',item.reason+' · item '+item.itemHash),h('small','Instance '+item.id+' · '+item.location));
-          if(item.kind==='weapon'){row.append(h('small','Origin read: '+(item.origin?.join(' / ') || 'not available')));item.columns?.forEach((col,index)=>row.append(h('small','Column '+(index+1)+': '+col.join(' / '))));}
+          if(item.kind==='weapon')row.append(weaponReviewComparison(item));
           if(item.kind==='armor'){row.append(h('small','Archetype read: '+(item.archetype || 'not available')),
             h('small','Base stats: '+(Object.entries(item.baseStats || {}).map(([stat,value])=>stat+' '+value).join(' · ') || 'not available')));}
           const options=item.options?.map(w=>({value:String(w.id),text:w.name+' · '+w.element+' · '+w.source+' · '+w.archetype+' · catalog '+w.id})) || item.setOptions?.map(s=>({value:s.name,text:s.name}));
           if(options?.length){const select=h('select');select.setAttribute('aria-label','Catalog match for '+item.name);const empty=h('option','Choose a catalog match…');empty.value='';select.append(empty);for(const option of options){const o=h('option',option.text);o.value=option.value;select.append(o);}select.addEventListener('change',()=>{if(!select.value)return;mappings={...mappings,[item.itemHash]:select.value};localStorage.setItem('vaultBungieMappings-'+kind,JSON.stringify(mappings));analyze();});row.append(select);}
           if(!demo){row.append(h('small',item.locked?'Currently LOCKED in game':'Currently unlocked in game'));const decision=reviewDecisions[item.id];const acts=h('div',undefined,'scan-actions');
-            acts.append(button(decision==='keep'?'✓ Keeping (lock)':'Keep (lock)',()=>{if(reviewDecisions[item.id]==='keep')delete reviewDecisions[item.id];else reviewDecisions[item.id]='keep';render();},decision==='keep'?'primary':''),
-              button(decision==='drop'?"✓ Not keeping (unlock)":"Don't keep (unlock)",()=>{if(reviewDecisions[item.id]==='drop')delete reviewDecisions[item.id];else reviewDecisions[item.id]='drop';render();},decision==='drop'?'primary':''));
+            for(const [value,label,selected] of [['keep','Keep (lock)','✓ Keeping (lock)'],['drop',"Don't keep (unlock)",'✓ Not keeping (unlock)']]){
+              const choose=button(decision===value?selected:label,()=>{const scroll=dialog.scrollTop;if(reviewDecisions[item.id]===value)delete reviewDecisions[item.id];else reviewDecisions[item.id]=value;render();dialog.scrollTop=scroll;
+                [...report.querySelectorAll('[data-review-copy]')].find(b=>b.dataset.reviewCopy===String(item.id) && b.dataset.decision===value)?.focus({preventScroll:true});},decision===value?'primary':'');
+              choose.dataset.edit='';choose.dataset.reviewCopy=String(item.id);choose.dataset.decision=value;choose.setAttribute('aria-pressed',String(decision===value));acts.append(choose);
+            }
             row.append(acts);}
           review.append(row);
         }report.append(review);}
