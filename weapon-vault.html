@@ -318,7 +318,7 @@
   .chip-scroller{
     display:flex;
     gap:6px;
-    overflow-x:auto;
+    flex-wrap:wrap;
     padding-bottom:2px;
   }
   .chip-scroller::-webkit-scrollbar{height:4px;}
@@ -852,7 +852,7 @@ const PERK_KEYS = ['perk0','perk1','perk2','perk3'];
 const state = {
   records: {},              // id(string) -> {owned,rollTier,mod,perk0..perk3}
   query: '',
-  nameOnly: false,
+  nameOnly: true,
   elements: new Set(ELEMENTS),
   status: 'all',             // all | owned | unowned | basic | good | god
   collapsed: new Set(['C','D','E','F']),
@@ -1548,7 +1548,9 @@ function wireControls(){
     renderAll();
   });
 
-  document.getElementById('nameOnlyToggle').addEventListener('click', e => {
+  const nameOnlyBtn = document.getElementById('nameOnlyToggle');
+  nameOnlyBtn.classList.toggle('active', state.nameOnly);
+  nameOnlyBtn.addEventListener('click', e => {
     state.nameOnly = !state.nameOnly;
     e.currentTarget.classList.toggle('active', state.nameOnly);
     if(state.query) renderAll();
