@@ -808,6 +808,9 @@
           <span class="chip-sep"></span>
           <button class="chip" id="expandAllBtn" data-action="expand">Expand all</button>
           <button class="chip" id="collapseAllBtn" data-action="collapse">Collapse all</button>
+          <span class="chip-sep"></span>
+          <button class="chip" id="clearAllBtn" data-action="clear" title="Wipe the whole checklist so you can run a fresh scan (a Restore backup is kept)">Clear checklist</button>
+          <button class="chip" id="restoreBtn" data-action="restore" title="Undo the last Clear" hidden>Restore</button>
         </div>
 
         <div class="chip-scroller" id="elementChips"></div>
@@ -842,7 +845,7 @@ const GRADE_VAR = {S:'--gr-s',A:'--gr-a',B:'--gr-b',C:'--gr-c',D:'--gr-d',E:'--g
 const ELEMENTS = ['Kinetic','Arc','Solar','Void','Stasis','Strand'];
 const ELEMENT_VAR = {Kinetic:'--el-kinetic',Arc:'--el-arc',Solar:'--el-solar',Void:'--el-void',Stasis:'--el-stasis',Strand:'--el-strand'};
 
-const DEFAULT_RECORD = { owned:false, rollTier:'none', mod:'', hasFocus:false, autoGod:false, perk0:[], perk1:[], perk2:[], perk3:[] };
+const DEFAULT_RECORD = { owned:false, rollTier:'none', mod:'', hasFocus:false, autoGod:false, originSel:false, perk0:[], perk1:[], perk2:[], perk3:[] };
 const ROLL_TIERS = ['basic','good','god'];
 const PERK_KEYS = ['perk0','perk1','perk2','perk3'];
 
@@ -872,8 +875,6 @@ function setRecord(id, patch){
   return state.records[key];
 }
 
-WEAPONS.forEach(w => { if(w.owned) setRecord(w.id, { owned: true }); });
-
 let dbRef = null;
 let localOnly = true;
 
@@ -898,6 +899,7 @@ function normalizeRecord(raw){
       mod: typeof raw.mod === 'string' ? raw.mod : '',
       hasFocus: !!raw.hasFocus,
       autoGod: !!raw.autoGod,
+      originSel: !!raw.originSel,
       scan: raw.scan?.source === "bungie" ? JSON.parse(JSON.stringify(raw.scan)) : undefined,
     };
     PERK_KEYS.forEach(k => {
@@ -929,7 +931,11 @@ function loadLocal(){
     if(legacy){
       const obj = JSON.parse(legacy);
       Object.keys(obj).forEach(k => { if(obj[k]) setRecord(k, { owned: true }); });
+      return;
     }
+    // first-ever load only: seed the catalog's "owned" defaults from the sheet.
+    // (After a Clear, an empty 'weaponVaultRecords' exists, so this is skipped.)
+    WEAPONS.forEach(w => { if(w.owned) setRecord(w.id, { owned: true }); });
   }catch(e){}
 }
 function saveLocal(){
@@ -1000,6 +1006,41 @@ function pushRecord(id, patch){
   }
 }
 
+// ---------- clear / restore the whole checklist ----------
+const CLEAR_BACKUP_KEY = 'weaponVaultRecords-before-clear';
+function hasClearBackup(){
+  try{ return !!localStorage.getItem(CLEAR_BACKUP_KEY); }catch(e){ return false; }
+}
+function updateRestoreChip(){
+  const b = document.getElementById('restoreBtn');
+  if(b) b.hidden = !hasClearBackup();
+}
+function clearAllRecords(){
+  const n = Object.keys(state.records).length;
+  if(!confirm('Clear the entire checklist (' + n + ' marked ' + (n === 1 ? 'weapon' : 'weapons') +
+    ')?\n\nThis wipes owned marks, roll tiers, selected perks and mods so you can run a completely fresh scan. A one-click Restore backup is kept.')) return;
+  try{ localStorage.setItem(CLEAR_BACKUP_KEY, JSON.stringify(state.records)); }catch(e){}
+  state.records = {};
+  saveLocal();
+  if(dbRef){ setSync('syncing'); dbRef.set({}).catch(() => setSync('error')); }
+  updateRestoreChip();
+  renderAll();
+}
+function restoreClearedRecords(){
+  let raw = null;
+  try{ raw = localStorage.getItem(CLEAR_BACKUP_KEY); }catch(e){}
+  if(!raw){ updateRestoreChip(); return; }
+  let obj; try{ obj = JSON.parse(raw); }catch(e){ return; }
+  const restored = {};
+  Object.keys(obj).forEach(k => { restored[k] = normalizeRecord(obj[k]); });
+  state.records = restored;
+  saveLocal();
+  if(dbRef){ setSync('syncing'); dbRef.set(restored).catch(() => setSync('error')); }
+  try{ localStorage.removeItem(CLEAR_BACKUP_KEY); }catch(e){}
+  updateRestoreChip();
+  renderAll();
+}
+
 function afterRecordChange(w){
   updateProgress();
   if(state.status !== 'all'){
@@ -1043,10 +1084,12 @@ function setMod(w, text){
 // while every other required condition already holds, auto-flag the roll as
 // god-tier; if a later change breaks one of those conditions and the god tier
 // was set by this auto behavior (not a manual "Mark God Roll" click), revert it
-function mergeAutoGod(prevRec, patch){
+function mergeAutoGod(prevRec, patch, w){
   const next = { ...prevRec, ...patch };
   const allColsFilled = PERK_KEYS.every(k => next[k].length > 0);
-  const shouldBeGod = allColsFilled && next.hasFocus;
+  // A weapon that has an origin trait must also have the origin marked to be God.
+  const originOk = !(w && w.origin) || next.originSel;
+  const shouldBeGod = allColsFilled && next.hasFocus && originOk;
   if(shouldBeGod && next.rollTier !== 'god'){
     return { ...patch, rollTier: 'god', owned: true, autoGod: true };
   }
@@ -1058,7 +1101,16 @@ function mergeAutoGod(prevRec, patch){
 
 function toggleFocus(w){
   const rec = getRecord(w.id);
-  const patch = mergeAutoGod(rec, { hasFocus: !rec.hasFocus });
+  const patch = mergeAutoGod(rec, { hasFocus: !rec.hasFocus }, w);
+  setRecord(w.id, patch);
+  pushRecord(w.id, patch);
+  afterRecordChange(w);
+}
+
+// toggle whether the desired origin trait is present (counts toward a God roll)
+function setOrigin(w){
+  const rec = getRecord(w.id);
+  const patch = mergeAutoGod(rec, { originSel: !rec.originSel }, w);
   setRecord(w.id, patch);
   pushRecord(w.id, patch);
   afterRecordChange(w);
@@ -1069,7 +1121,7 @@ function setPerk(w, colIndex, perkName){
   const key = PERK_KEYS[colIndex];
   const has = rec[key].includes(perkName);
   const next = has ? rec[key].filter(s => s !== perkName) : [...rec[key], perkName];
-  const patch = mergeAutoGod(rec, { [key]: next });
+  const patch = mergeAutoGod(rec, { [key]: next }, w);
   setRecord(w.id, patch);
   pushRecord(w.id, patch);
   afterRecordChange(w);
@@ -1191,9 +1243,12 @@ function buildRollBlock(w){
     label.className = 'roll-col-label';
     label.textContent = 'Origin';
     originRow.appendChild(label);
-    const pill = document.createElement('span');
-    pill.className = 'roll-pill';
-    pill.textContent = w.origin;
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'roll-pill selectable' + (rec.originSel ? ' selected' : '');
+    pill.textContent = (rec.originSel ? '✓ ' : '') + w.origin;
+    pill.title = 'Mark the origin trait if your roll has it — required for a God roll';
+    pill.addEventListener('click', e => { e.stopPropagation(); setOrigin(w); });
     originRow.appendChild(pill);
     block.appendChild(originRow);
   }
@@ -1512,8 +1567,13 @@ function wireControls(){
     }else if(btn.dataset.action === 'collapse'){
       GRADE_ORDER.forEach(g => state.collapsed.add(g));
       renderAll();
+    }else if(btn.dataset.action === 'clear'){
+      clearAllRecords();
+    }else if(btn.dataset.action === 'restore'){
+      restoreClearedRecords();
     }
   });
+  updateRestoreChip();
 }
 
 buildElementChips();

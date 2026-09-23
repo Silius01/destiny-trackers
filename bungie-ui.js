@@ -122,6 +122,14 @@
           if(!plan.some(p=>p.recordId===group.recordId))dup.append(h('small','Lock changes paused: another copy needs review','scan-warning'));
           tr.append(name,tier,perks,dup);tbody.append(tr);
         }wrap.append(table);report.append(wrap);
+        if(result.exoticWeapons?.length){
+          const willLock=result.exoticWeapons.filter(i=>!i.locked).length;
+          const details=h('details');
+          details.append(h('summary',count(result.exoticWeapons.length,'exotic weapon')+' · kept and locked'+(willLock?' · '+willLock+' to lock':' · already locked')));
+          details.append(h('p','Every exotic weapon is kept and locked. Exotics are never proposed for unlocking.'));
+          for(const i of result.exoticWeapons)details.append(h('p',i.name+' · '+i.location+' · '+i.power+' Power · '+(i.locked?'already locked':'will lock')),h('small','Instance '+i.id));
+          report.append(details);
+        }
       }else{
         report.append(h('h3','Keep one copy of each armor combination'),h('p','Legendary and exotic armor keep separate copies for different pieces, classes, archetypes, tertiary stats, gear tiers, and Artifice versions. Exotic class-item perk pairs also stay separate. Suggested keepers use the highest base-stat total. Choose a different copy below if you prefer its distribution.'));
         const statsText=copy=>Object.entries(copy.baseStats).filter(([,value])=>value>0).map(([stat,value])=>stat+' '+value).join(' · ');

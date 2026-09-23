@@ -66,6 +66,7 @@
     const active = (sockets || []).filter(s=>s.plugHash && s.isEnabled !== false).map(s=>defs.items[s.plugHash]).filter(Boolean);
     const kind = def.itemType === 3 ? 'weapon' : def.itemType === 2 ? 'armor' : 'other';
     const result = {...item, name:def.displayProperties?.name || 'Unknown item', kind, def,
+      exotic:def.inventory?.tierType === 6,
       power:profile.itemComponents?.instances?.data?.[item.id]?.primaryStat?.value || 0,
       signature:fingerprint(item,profile), className:CLASS[def.classType] || '', active,
       element:ELEMENT[profile.itemComponents?.instances?.data?.[item.id]?.damageType || def.defaultDamageType] || ''};
@@ -170,6 +171,7 @@
   }
   function weaponRecord(winner, scannedAt) {
     return {owned:true,rollTier:winner.tier,hasFocus:winner.hasFocus,autoGod:winner.tier === 'god',mod:'',
+      originSel:!!winner.weapon.origin,
       ...Object.fromEntries(keys.map((key,n)=>[key,winner.perks[n]])),
       scan:{instanceId:winner.id,itemHash:winner.itemHash,location:winner.location,at:scannedAt,source:'bungie'}};
   }
@@ -177,13 +179,15 @@
   function scan(profile, defs, catalog, mappings={}, now=Date.now()) {
     const raw = inventory(profile);
     const items = raw.map(i=>resolve(i,profile,defs));
-    const groups = new Map(), review = [], patches = {}, armorMatches=[];
+    const groups = new Map(), review = [], patches = {}, armorMatches=[], exoticWeapons=[];
     const scannedAt = new Date(now).toISOString();
     for (const item of items) {
       if (item.kind==='unknown') { review.push({...item,reason:item.problem});continue; }
       if (item.kind !== catalog.kind) continue;
       if (item.problem) { review.push({...item,reason:item.problem}); continue; }
       if (catalog.kind === 'weapon') {
+        // Every exotic weapon is kept and locked; it never needs a catalog roll match.
+        if (item.exotic) { exoticWeapons.push(item); continue; }
         const options = weaponOptions(item,catalog.weapons);
         const mapped = mappings[item.itemHash];
         const weapon = mapped !== undefined ? options.find(w=>String(w.id) === String(mapped)) : options.length === 1 ? options[0] : null;
@@ -262,7 +266,7 @@
       copies.sort(compare);
       return {groupId,recordId:copies[0].recordId,winner:copies[0],copies};
     }).sort((a,b)=>a.winner.name.localeCompare(b.winner.name) || a.groupId.localeCompare(b.groupId));
-    return {kind:catalog.kind,at:now,scannedAt,items,weapons,armor,armorMatches,patches,review,
+    return {kind:catalog.kind,at:now,scannedAt,items,weapons,armor,armorMatches,exoticWeapons,patches,review,
       account:profile.profile?.data?.userInfo?.membershipId || '',membershipType:profile.profile?.data?.userInfo?.membershipType};
   }
 
@@ -270,12 +274,18 @@
     // A malformed or unrecognized copy with the same item hash makes the whole family review-only.
     const blocked = new Set([...scanResult.review,...scanResult.armorMatches.filter(i=>i.lockIssue)].map(i=>i.itemHash));
     const groups = scanResult.kind === 'armor' ? scanResult.armor : scanResult.weapons;
-    return groups.filter(g=>!g.copies.some(i=>blocked.has(i.itemHash))).map(g=>{
+    const plan = groups.filter(g=>!g.copies.some(i=>blocked.has(i.itemHash))).map(g=>{
       const keeper=g.copies.find(i=>i.id===keepers[g.groupId]) || g.winner;
       const duplicates=g.copies.filter(i=>i.id!==keeper.id);
       return {groupId:g.groupId,recordId:g.recordId,name:keeper.name,keeper,
         locks:keeper.locked ? [] : [keeper],unlocks:duplicates.filter(i=>i.locked),duplicates,copies:g.copies};
     });
+    // Keep and lock every exotic weapon; exotics are never proposed for unlocking.
+    for (const item of scanResult.exoticWeapons || []) {
+      plan.push({groupId:'exotic-weapon:'+item.id,recordId:null,name:item.name,keeper:item,
+        locks:item.locked ? [] : [item],unlocks:[],duplicates:[],copies:[item],exoticWeapon:true});
+    }
+    return plan;
   }
 
   function armorLockBlockers(result, itemHash) {
