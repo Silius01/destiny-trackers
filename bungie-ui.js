@@ -6,7 +6,7 @@
   const count=(n,one,many=one+'s')=>n+' '+(n===1?one:many);
   function mount(adapter){
     const kind=adapter.catalog.kind,api=VaultBungie,core=VaultScanCore,key=adapter.storageKey;
-    let profile,defs,result,client,accounts=[],busy=false,demo=false,keepers={},lastReport=null,savedScan=false;
+    let profile,defs,result,client,accounts=[],busy=false,demo=false,keepers={},reviewDecisions={},lastReport=null,savedScan=false;
     let mappings=read('vaultBungieMappings-'+kind,{});
     let comparisonBase=null,scanChanges=null;
     const dialog=h('dialog',undefined,'bungie-dialog');
@@ -75,7 +75,7 @@
       demo=true;const sample=root.VaultScanExample(adapter.catalog);profile=sample.profile;defs=sample.defs;analyze(true);
     }
     function analyze(newScan=false){
-      keepers={};savedScan=false;viewSaved.hidden=true;result=core.scan(profile,defs,adapter.catalog,mappings);
+      keepers={};reviewDecisions={};savedScan=false;viewSaved.hidden=true;result=core.scan(profile,defs,adapter.catalog,mappings);
       const snapshot=kind==='armor'?core.armorScanSnapshot(result):null;
       const historyKey=snapshot?.account?key+'-last-scan-'+snapshot.membershipType+'-'+snapshot.account:null;
       if(newScan)comparisonBase=!demo && historyKey?read(historyKey,null):null;
@@ -98,6 +98,13 @@
     function stat(value,label){const box=h('div',undefined,'scan-stat');box.append(h('b',String(value)),h('small',label));return box;}
     function render(){
       report.replaceChildren();const plan=core.lockPlan(result,keepers);
+      // Manual keep/don't-keep flags on review copies become lock/unlock actions.
+      for(const [rid,decision] of Object.entries(reviewDecisions)){
+        const item=result.review.find(i=>String(i.id)===String(rid));
+        if(!item)continue;
+        if(decision==='keep')plan.push({groupId:'review-keep:'+rid,recordId:null,name:item.name,keeper:item,locks:item.locked?[]:[item],unlocks:[],duplicates:[],copies:[item]});
+        else if(decision==='drop')plan.push({groupId:'review-drop:'+rid,recordId:null,name:item.name,keeper:item,locks:[],unlocks:item.locked?[item]:[],duplicates:[],copies:[item],manualUnlock:true});
+      }
       const stats=h('div',undefined,'scan-stats');stats.append(stat(result.items.filter(i=>i.kind===kind).length,'copies checked'),stat(Object.keys(result.patches).length,'checklist entries matched'),stat(result.review.length,'copies needing review'));
       if(kind==='armor'){
         report.append(h('h3',demo?'Example inventory':scanChanges?'Changes since your last scan':'First scan for comparison'));
@@ -157,12 +164,17 @@
         if(exotics.length){const details=h('details');details.append(h('summary',count(exotics.length,'exotic copy','exotic copies')+' · ownership tracked, roll needs review'));for(const copy of exotics)details.append(h('p',copy.name+' · '+copy.className+' · '+copy.location+' · '+copy.id),h('small','Locks unchanged: '+(result.review.find(i=>i.id===copy.id)?.reason || 'Roll could not be read')));report.append(details);}
       }
       if(result.review.length){const review=h('details');review.append(h('summary','Review '+result.review.length+' unmatched or ambiguous copies'));
-        const seen=new Set();for(const item of result.review){const reviewKey=kind==='armor'?item.id:item.itemHash+':'+item.reason;if(seen.has(reviewKey))continue;seen.add(reviewKey);const row=h('div',undefined,'scan-item');row.append(h('b',item.name),h('small',item.reason+' · item '+item.itemHash),h('small','Instance '+item.id+' · '+item.location));
+        const seen=new Set();for(const item of result.review){const reviewKey=item.id;if(seen.has(reviewKey))continue;seen.add(reviewKey);const row=h('div',undefined,'scan-item');row.append(h('b',item.name),h('small',item.reason+' · item '+item.itemHash),h('small','Instance '+item.id+' · '+item.location));
           if(item.kind==='weapon'){row.append(h('small','Origin read: '+(item.origin?.join(' / ') || 'not available')));item.columns?.forEach((col,index)=>row.append(h('small','Column '+(index+1)+': '+col.join(' / '))));}
           if(item.kind==='armor'){row.append(h('small','Archetype read: '+(item.archetype || 'not available')),
             h('small','Base stats: '+(Object.entries(item.baseStats || {}).map(([stat,value])=>stat+' '+value).join(' · ') || 'not available')));}
           const options=item.options?.map(w=>({value:String(w.id),text:w.name+' · '+w.element+' · '+w.source+' · '+w.archetype+' · catalog '+w.id})) || item.setOptions?.map(s=>({value:s.name,text:s.name}));
-          if(options?.length){const select=h('select');select.setAttribute('aria-label','Catalog match for '+item.name);const empty=h('option','Choose a catalog match…');empty.value='';select.append(empty);for(const option of options){const o=h('option',option.text);o.value=option.value;select.append(o);}select.addEventListener('change',()=>{if(!select.value)return;mappings={...mappings,[item.itemHash]:select.value};localStorage.setItem('vaultBungieMappings-'+kind,JSON.stringify(mappings));analyze();});row.append(select);}review.append(row);
+          if(options?.length){const select=h('select');select.setAttribute('aria-label','Catalog match for '+item.name);const empty=h('option','Choose a catalog match…');empty.value='';select.append(empty);for(const option of options){const o=h('option',option.text);o.value=option.value;select.append(o);}select.addEventListener('change',()=>{if(!select.value)return;mappings={...mappings,[item.itemHash]:select.value};localStorage.setItem('vaultBungieMappings-'+kind,JSON.stringify(mappings));analyze();});row.append(select);}
+          if(!demo){row.append(h('small',item.locked?'Currently LOCKED in game':'Currently unlocked in game'));const decision=reviewDecisions[item.id];const acts=h('div',undefined,'scan-actions');
+            acts.append(button(decision==='keep'?'✓ Keeping (lock)':'Keep (lock)',()=>{if(reviewDecisions[item.id]==='keep')delete reviewDecisions[item.id];else reviewDecisions[item.id]='keep';render();},decision==='keep'?'primary':''),
+              button(decision==='drop'?"✓ Not keeping (unlock)":"Don't keep (unlock)",()=>{if(reviewDecisions[item.id]==='drop')delete reviewDecisions[item.id];else reviewDecisions[item.id]='drop';render();},decision==='drop'?'primary':''));
+            row.append(acts);}
+          review.append(row);
         }report.append(review);}
       const actions=h('div',undefined,'scan-actions');
       const save=button(savedScan?'Saved to checklist':'Save scan to checklist',()=>run(async()=>{

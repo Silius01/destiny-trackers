@@ -364,6 +364,14 @@
     const completed = [];
     try {
     for (const group of plan) {
+      // Manually flagged "don't keep" review copies: just unlock them (no keeper).
+      if (group.manualUnlock) {
+        for (const item of group.unlocks) {
+          const cur = byId.get(item.id);
+          if (cur.locked) { await client.setLock(cur,false); completed.push({itemId:cur.id,state:false}); onProgress(completed); }
+        }
+        continue;
+      }
       const keeper = byId.get(group.keeper.id);
       // Lock and verify the selected copy before making any duplicate easier to dismantle.
       if (!keeper.locked) {
@@ -379,6 +387,12 @@
     }
     const verified = new Map(inventory(await client.profile()).map(i=>[i.id,i]));
     for (const group of plan) {
+      if (group.manualUnlock) {
+        if (group.unlocks.some(i=>verified.get(i.id)?.locked !== false)) {
+          throw Object.assign(new Error('Bungie has not confirmed every lock change. Scan again to see current status.'),{completed});
+        }
+        continue;
+      }
       if (!verified.get(group.keeper.id)?.locked || group.duplicates.some(i=>verified.get(i.id)?.locked !== false)) {
         throw Object.assign(new Error('Bungie has not confirmed every lock change. Scan again to see current status.'),{completed});
       }
