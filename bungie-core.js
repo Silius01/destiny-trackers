@@ -383,9 +383,14 @@
   }
 
   async function executeLocks(plan, client, original, onProgress=()=>{}, {wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}) {
-    const completed = [];
+    const completed = [],skippedGroups=[],processed=[];
     let operation={phase:'preflight'};
     const target=(phase,item)=>({phase,itemId:item.id,name:item.name,location:item.location});
+    function profileItems(profile){
+      if(String(profile.profile?.data?.userInfo?.membershipId)!==String(original.account) || profile.profile?.data?.userInfo?.membershipType!==original.membershipType)
+        throw new Error('The connected account changed during verification. Scan again.');
+      return new Map(inventory(profile).map(i=>[i.id,i]));
+    }
     // Retry reads only. A successful write can take time to appear in a read;
     // a failed write is never retried automatically.
     async function confirm(read,accept){
@@ -410,6 +415,7 @@
           const cur = byId.get(item.id);
           if (cur.locked) await write({...cur,name:item.name},false);
         }
+        processed.push(group);
         continue;
       }
       const keeper = {...byId.get(group.keeper.id),name:group.keeper.name};
@@ -418,31 +424,59 @@
         await write(keeper,true);
       }
       operation=target('verify-keeper',keeper);onProgress(completed,operation);
-      const confirmed=await confirm(()=>client.item(keeper),check=>
-        id(check.item?.data?.itemInstanceId)===keeper.id && !!(check.item.data.state & 1));
-      if (!confirmed) throw new Error('Keeper lock could not be verified. Duplicate unlocks stopped.');
+      const observations=[];
+      let confirmed=await confirm(()=>client.item(keeper),check=>{
+        const raw=check?.item?.data,observedId=id(raw?.itemInstanceId),state=Number.isInteger(raw?.state)?!!(raw.state&1):null;
+        observations.push({source:'item',itemId:observedId || null,locked:state});
+        return observedId===keeper.id && state===true;
+      });
+      if(!confirmed){
+        operation=target('verify-inventory',keeper);onProgress(completed,operation);
+        const profile=await client.profile(),items=profileItems(profile),item=items.get(keeper.id);
+        observations.push({source:'inventory',itemId:item?.id || null,locked:item?.locked ?? null,minted:profile.responseMintedTimestamp});
+        if(item?.locked){
+          // Revalidate the whole family against the original preview, accounting
+          // only for writes this operation has already sent successfully.
+          const changed=new Map(completed.map(c=>[c.itemId,c.state]));
+          validatePlan([group],{...original,items:original.items.map(i=>changed.has(i.id)?{...i,locked:changed.get(i.id)}:i)},profile);
+          confirmed=true;
+        }
+      }
+      if(!confirmed){
+        const skipped={...target('verify-keeper',keeper),reason:'Keeper lock could not be verified. Duplicate unlocks skipped for this group.',
+          protectedDuplicates:group.unlocks.map(i=>({itemId:i.id,name:i.name})),observations};
+        skippedGroups.push(skipped);onProgress(completed,{...skipped,phase:'group-skipped',skippedGroups:[...skippedGroups]});
+        continue;
+      }
       for (const duplicate of group.unlocks) {
         await write({...byId.get(duplicate.id),name:duplicate.name},false);
       }
+      processed.push(group);
     }
     operation={phase:'verify-final'};onProgress(completed,operation);
-    const expected=plan.flatMap(group=>group.manualUnlock?group.unlocks.map(item=>({item,state:false})):
+    const expected=processed.flatMap(group=>group.manualUnlock?group.unlocks.map(item=>({item,state:false})):
       [{item:group.keeper,state:true},...group.duplicates.map(item=>({item,state:false}))]);
-    let unconfirmed=[];
+    let unconfirmed=[],verified;
     const confirmed=await confirm(()=>client.profile(),profile=>{
-      if(String(profile.profile?.data?.userInfo?.membershipId)!==String(original.account) || profile.profile?.data?.userInfo?.membershipType!==original.membershipType)
-        throw new Error('The connected account changed during verification. Scan again.');
-      const verified=new Map(inventory(profile).map(i=>[i.id,i]));
+      verified=profileItems(profile);
       unconfirmed=expected.filter(({item,state})=>verified.get(item.id)?.locked!==state)
         .map(({item,state})=>({itemId:item.id,name:item.name,location:item.location,expectedLocked:state,observedLocked:verified.get(item.id)?.locked ?? null}));
       return !unconfirmed.length;
     });
     if(!confirmed)throw Object.assign(new Error('Bungie has not confirmed every lock change. Scan again to see current status.'),{unconfirmed});
+    if(skippedGroups.length){
+      const verifiedChanges=completed.filter(c=>verified.get(c.itemId)?.locked===c.state);
+      const unresolved=skippedGroups.filter(g=>verified.get(g.itemId)?.locked!==true).map(g=>({itemId:g.itemId,name:g.name,location:g.location,expectedLocked:true,observedLocked:verified.get(g.itemId)?.locked ?? null}));
+      const skippedUnlocks=skippedGroups.reduce((n,g)=>n+g.protectedDuplicates.length,0);
+      operation={phase:'partial'};
+      throw Object.assign(new Error('Finished the other groups. '+skippedGroups.length+' keeper verification'+(skippedGroups.length===1?'':'s')+' could not finish; '+skippedUnlocks+' duplicate unlock'+(skippedUnlocks===1?' was':'s were')+' skipped. Scan again to retry these groups.'),
+        {partial:true,verifiedChanges,unconfirmed:unresolved});
+    }
     return completed;
     } catch (error) {
-      error.completed=completed;error.lockFailure=operation;
+      error.completed=completed;error.lockFailure=operation;error.skippedGroups=skippedGroups;
       if(operation.itemId)error.message+=' Item: '+operation.name+' · '+operation.location+' · '+operation.itemId+'.';
-      error.message+=' Bungie accepted '+completed.length+' change request'+(completed.length===1?'':'s')+' before this stopped; the full batch is not verified. Scan again before retrying.';
+      if(!error.partial)error.message+=' Bungie accepted '+completed.length+' change request'+(completed.length===1?'':'s')+' before this stopped; the full batch is not verified. Scan again before retrying.';
       throw error;
     }
   }

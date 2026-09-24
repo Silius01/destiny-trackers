@@ -65,13 +65,17 @@
       lockResultBox.replaceChildren();const active=accounts[Number(accountSelect.value)];
       lockResultBox.hidden=!lastLock || (active && (String(active.membershipId)!==String(lastLock.account) || active.membershipType!==lastLock.membershipType));
       if(lockResultBox.hidden)return;
-      const ok=lastLock.status==='verified',running=lastLock.status==='running';
+      const ok=lastLock.status==='verified',partial=lastLock.status==='partial',running=lastLock.status==='running';
       lockResultBox.classList.toggle('error',!ok);
-      lockResultBox.append(h('h3',ok?'Last lock changes verified':running?(busy?'Lock changes in progress':'Last lock attempt did not finish'):'Last lock batch stopped'),
+      lockResultBox.append(h('h3',ok?'Last lock changes verified':partial?'Lock batch finished with skipped groups':running?(busy?'Lock changes in progress':'Last lock attempt did not finish'):'Last lock batch stopped'),
         h('small',new Date(lastLock.at).toLocaleString()),h('p',lastLock.accepted+' of '+lastLock.planned+' change requests accepted by Bungie'+(ok?' and verified.':'; the full batch is not verified.')));
       if(lastLock.message)lockResultBox.append(h('p',lastLock.message));
       if(!ok && !busy)lockResultBox.append(h('p','Run a fresh scan before applying more changes.'));
-      if(ok)lockResultBox.append(h('p',count(lastLock.locked,'copy','copies')+' locked; '+count(lastLock.unlocked,'copy','copies')+' unlocked. '+(lastLock.checklistSaved?'Checklist saved.':'Checklist was not saved.')));
+      if(ok || partial)lockResultBox.append(h('p','Verified: '+count(lastLock.locked,'copy','copies')+' locked; '+count(lastLock.unlocked,'copy','copies')+' unlocked. '+(lastLock.checklistSaved?'Checklist saved.':'Checklist was not saved.')));
+      if(lastLock.skippedGroups?.length){const details=h('details');details.open=true;details.append(h('summary',count(lastLock.skippedGroups.length,'group')+' skipped; other groups were allowed to continue'));
+        for(const group of lastLock.skippedGroups)details.append(h('p',group.name+' · '+group.location+' · '+group.reason),
+          h('small','Instance '+group.itemId+' · '+count(group.protectedDuplicates.length,'duplicate unlock')+' skipped'));
+        lockResultBox.append(details);}
       if(lastLock.unconfirmed?.length){const details=h('details');details.open=true;details.append(h('summary',count(lastLock.unconfirmed.length,'copy','copies')+' not confirmed'));
         for(const item of lastLock.unconfirmed)details.append(h('p',item.name+' · '+item.location+' · expected '+(item.expectedLocked?'locked':'unlocked')+' · '+item.itemId));lockResultBox.append(details);}
       if(lastLock.excluded?.length){const details=h('details');details.append(h('summary',count(lastLock.excluded.length,'copy','copies')+' left for review; excluded from this lock batch'));
@@ -258,9 +262,10 @@
           let lockVerified=false;
           try{
             const completed=await core.executeLocks(plan,client,current,(done,step)=>{
-              const action=step?.phase==='verify-final'?'Checking the final lock states':step?.phase==='verify-keeper'?'Verifying keeper: '+step.name:(step?.phase==='unlock'?'Unlocking: ':'Locking: ')+(step?.name || 'selected copies');
+              const action=step?.phase==='verify-final'?'Checking the final lock states':step?.phase==='group-skipped'?'Leaving '+step.name+' for review and continuing':step?.phase==='verify-inventory'?'Checking fresh inventory for '+step.name:step?.phase==='verify-keeper'?'Verifying keeper: '+step.name:(step?.phase==='unlock'?'Unlocking: ':'Locking: ')+(step?.name || 'selected copies');
               status(done.length+' of '+changes+' change requests accepted. '+action+(step?.retrying?' (waiting for Bungie to update)':'')+'…');
-              if(step?.accepted)rememberLockResult({...outcome,accepted:done.length});
+              if(step?.skippedGroups)outcome.skippedGroups=step.skippedGroups;
+              if(step?.accepted || step?.skippedGroups)rememberLockResult({...outcome,accepted:done.length});
             });
             lockVerified=true;Object.assign(outcome,{status:'verified',accepted:completed.length,locked:completed.filter(c=>c.state).length,unlocked:completed.filter(c=>!c.state).length,completed});
             lastReport.lockResult={...outcome};rememberLockResult({...outcome});
@@ -268,8 +273,15 @@
             status('Checklist saved. '+(kind==='armor'?armorChangeText()+' ':'')+count(completed.length,'lock change')+' verified by Bungie.'+(outcome.excluded.length?' '+count(outcome.excluded.length,'copy','copies')+' left for review and not changed.':''));
           }
           catch(error){
+            if(error.partial){
+              const verified=error.verifiedChanges || [];
+              Object.assign(outcome,{status:'partial',message:error.message,accepted:error.completed.length,completed:error.completed,skippedGroups:error.skippedGroups,
+                locked:verified.filter(c=>c.state).length,unlocked:verified.filter(c=>!c.state).length,verifiedChanges:verified,unconfirmed:error.unconfirmed || []});
+              try{await saveScan(false);outcome.checklistSaved=true;}catch(saveError){outcome.message+=' Checklist save failed: '+saveError.message;}
+              lastReport.lockResult={...outcome};rememberLockResult({...outcome});status(outcome.message,true);return;
+            }
             const failure=lockVerified?{...outcome,message:'Game locks were verified, but saving the checklist failed: '+error.message}:
-              {...outcome,status:'failed',message:error.message,accepted:error.completed?.length || 0,completed:error.completed || [],failure:error.lockFailure,unconfirmed:error.unconfirmed || []};
+              {...outcome,status:'failed',message:error.message,accepted:error.completed?.length || 0,completed:error.completed || [],failure:error.lockFailure,unconfirmed:error.unconfirmed || [],skippedGroups:error.skippedGroups || []};
             lastReport.lockResult=failure;rememberLockResult(failure);if(lockVerified)error.message=failure.message;throw error;
           }
           finally{result=null;report.replaceChildren();}

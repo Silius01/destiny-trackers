@@ -74,7 +74,9 @@
     if (!connected() || !config) throw new Error('Connect to Bungie again; the sign-in session has expired.');
     const read = /^\/(User\/GetMembershipsForCurrentUser\/|Destiny2\/Manifest\/|Destiny2\/[1236]\/Profile\/\d+\/(\?components=[\d,]+|Item\/\d+\/\?components=307))$/;
     if (!(body ? path === '/Destiny2/Actions/Items/SetLockState/' : read.test(path))) throw new Error('Unsupported Bungie operation.');
-    const response=await fetch(BASE+'/Platform'+path,{method:body?'POST':'GET',credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',cache:'no-store',
+    // Bungie's affinity cookies keep writes and follow-up reads on the same
+    // server. Omitting them can send verification to an older cached copy.
+    const response=await fetch(BASE+'/Platform'+path,{method:body?'POST':'GET',credentials:'include',redirect:'error',referrerPolicy:'no-referrer',cache:'no-store',
       headers:{'X-API-Key':config.apiKey,Authorization:'Bearer '+token.access_token,...(body?{'Content-Type':'application/json'}:{})},
       ...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});
     if (response.status===401) { sessionStorage.removeItem(TOKEN); throw new Error('Bungie sign-in expired. Reconnect and scan again.'); }

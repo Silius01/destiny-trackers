@@ -108,8 +108,9 @@ test('preflight detects tier and socket changes in another combo of the same pie
 });
 test('failed keeper verification and failed final verification are reported for armor',async()=>{
   const {profile,result}=fresh(),plan=core.lockPlan(result),actions=[],client=fakeClient(profile,actions);
+  const before=structuredClone(profile);client.profile=async()=>structuredClone(before);
   client.item=async()=>({item:{data:{state:0}}});
-  await assert.rejects(()=>core.executeLocks(plan,client,result),/Keeper lock/);
+  await assert.rejects(()=>core.executeLocks(plan,client,result,()=>{},{wait:async()=>{}}),e=>e.partial && e.skippedGroups.length>0);
   assert.equal(actions.some(a=>a[0]==='set'&&a[2]===false),false);
   const f=fresh(),mock=fakeClient(f.profile);mock.setLock=async(i,state)=>{if(state)copies(f.profile).find(raw=>raw.itemInstanceId===i.id).state|=1;};
   await assert.rejects(()=>core.executeLocks(core.lockPlan(f.result),mock,f.result),/not confirmed every lock change/);

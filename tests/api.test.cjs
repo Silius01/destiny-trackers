@@ -37,6 +37,13 @@ test('lock requests retain 64-bit instance IDs as strings and use the original m
   const body=JSON.parse(calls[0].options.body);assert.equal(body.itemId,'900719925474099103');assert.equal(body.membershipType,3);assert.equal(body.state,true);
   assert.equal(calls[0].url,'https://www.bungie.net/Platform/Destiny2/Actions/Items/SetLockState/');
 });
+
+test('Bungie API reads and writes preserve server affinity cookies while keeping OAuth authorization',async()=>{
+  const {api,calls}=harness(),client=api.client({membershipType:3,membershipId:'123'}),item={id:'6917530200136578779',characterId:'100'};
+  await client.profile();await client.setLock(item,true);await client.item(item);
+  for(const call of calls){assert.equal(call.options.credentials,'include');assert.equal(call.options.headers.Authorization,'Bearer TEST_TOKEN_NOT_A_CREDENTIAL');assert.equal(call.options.redirect,'error');}
+  assert.equal(calls[2].url,'https://www.bungie.net/Platform/Destiny2/3/Profile/123/Item/6917530200136578779/?components=307');
+});
 test('expired sessions send no authenticated request',async()=>{
   const {api,map,calls}=harness();map.set('vaultBungieToken',JSON.stringify({access_token:'TEST',expiresAt:Date.now()-100}));
   await assert.rejects(api.memberships,/expired/);assert.equal(calls.length,0);
