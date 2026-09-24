@@ -59,3 +59,23 @@ test('executing the plan locks unlocked exotic weapons and never unlocks any',as
   assert.ok(sets.length>0);
   assert.ok(sets.every(a=>a[2]===true));         // only lock (true) actions, never unlock (false)
 });
+
+test('exotic lock-only plans do not require four perk columns or complete perk data',async()=>{
+  for(const mode of ['layout','sockets','definition']){
+    const f=exoticFixture([false,false,false]);
+    if(mode==='layout')f.defs.items[111].sockets.socketCategories=[];
+    if(mode==='sockets')delete f.profile.itemComponents.sockets.data['900719925474099103'];
+    if(mode==='definition')delete f.defs.items[f.profile.itemComponents.sockets.data['900719925474099103'].sockets[0].plugHash];
+    const result=core.scan(f.profile,f.defs,weapons),plan=core.lockPlan(result);
+    assert.equal(result.exoticWeapons.length,3,mode);assert.equal(result.review.length,0,mode);
+    assert.equal(plan.reduce((n,g)=>n+g.locks.length,0),3,mode);
+    await core.executeLocks(plan,fakeClient(f.profile),result);
+    assert.ok(weaponCopies(f.profile).every(i=>i.state&1));
+  }
+});
+
+test('an unknown item definition does not qualify for automatic exotic locking',()=>{
+  const f=exoticFixture();delete f.defs.items[111];
+  const result=core.scan(f.profile,f.defs,weapons);
+  assert.equal(result.exoticWeapons.length,0);assert.equal(core.lockPlan(result).length,0);assert.equal(result.review.length,3);
+});

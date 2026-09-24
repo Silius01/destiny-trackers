@@ -9,6 +9,7 @@
     let profile,defs,result,client,accounts=[],busy=false,demo=false,keepers={},reviewDecisions={},lastReport=null,savedScan=false;
     let mappings=read('vaultBungieMappings-'+kind,{});
     let comparisonBase=null,scanChanges=null;
+    let lastLock=read(key+'-last-lock-result',null),lockStorageWarning='';
     const dialog=h('dialog',undefined,'bungie-dialog');
     const header=h('header');header.append(h('h2',kind==='weapon'?'Scan weapons':'Scan armor'),button('Close',()=>dialog.close()));
     const body=h('div',undefined,'scan-body');dialog.append(header,body);document.body.append(dialog);
@@ -33,12 +34,13 @@
       button('Disconnect',()=>{api.disconnect();client=null;result=null;report.replaceChildren();fillSavedSettings();status('Disconnected. Your app settings and checklist progress are still saved.');refreshConnection();}),
       button('Forget saved settings',()=>{try{api.forgetConfiguration();client=null;result=null;report.replaceChildren();fillSavedSettings();status('Saved API key and client ID removed. Disconnected; checklist progress is retained.');refreshConnection();}catch(e){status(e.message,true);}}));setup.append(connActions);
     const controls=h('div',undefined,'scan-actions'),accountSelect=h('select');accountSelect.setAttribute('aria-label','Destiny account');
-    accountSelect.addEventListener('change',()=>{result=null;report.replaceChildren();client=api.client(accounts[Number(accountSelect.value)]);updateButtons();});
+    accountSelect.addEventListener('change',()=>{result=null;report.replaceChildren();client=api.client(accounts[Number(accountSelect.value)]);showLockResult();updateButtons();});
     const scanButton=button('Scan vault + characters',()=>run(scanLive),'primary');
     const refreshButton=button('Refresh definitions & scan',()=>run(()=>scanLive(true)));
     const sampleButton=button('Try example scan',()=>run(scanSample));
     controls.append(accountSelect,scanButton,refreshButton,sampleButton);body.append(controls);
     const statusBox=h('div','Connect Bungie to scan your inventory, or try an example.', 'scan-status');statusBox.setAttribute('role','status');statusBox.setAttribute('aria-live','polite');body.append(statusBox);
+    const lockResultBox=h('section',undefined,'scan-lock-result');lockResultBox.hidden=true;body.append(lockResultBox);
     const report=h('div');body.append(report);
     const actionStatus=h('div',undefined,'scan-status');actionStatus.hidden=true;body.append(actionStatus);
     const savedActions=h('div',undefined,'scan-actions');
@@ -53,8 +55,32 @@
       'Only base armor stats determine the tertiary stat. Each physical item contributes its own combination. A set/slot/archetype is fully farmed when all four tertiary variants are tracked. Duplicate groups require the same piece, class, archetype, tertiary, gear tier, and Artifice status. Exotic class items also require the same two perks. The suggested keeper has the highest base-stat total; ties prefer an existing lock, then Power. Choose another copy in the preview if its stat distribution suits your build. Older or unreadable exotic rolls retain ownership tracking and need review before lock changes.'),h('p','Scans update matched entries and preserve earlier manual marks. A rescan replaces the previous scan’s contribution. Unrecognized items remain in the review list.'));body.append(how);
     function status(message,error=false){statusBox.textContent=message;statusBox.classList.toggle('error',error);
       actionStatus.textContent=message;actionStatus.classList.toggle('error',error);actionStatus.hidden=!(result || lastReport || error);}
+    function rememberLockResult(value){
+      lastLock=value;lockStorageWarning='';
+      try{localStorage.setItem(key+'-last-lock-result',JSON.stringify(value));}
+      catch{lockStorageWarning='This result could not be remembered after reload. Export it below.';}
+      showLockResult();
+    }
+    function showLockResult(){
+      lockResultBox.replaceChildren();const active=accounts[Number(accountSelect.value)];
+      lockResultBox.hidden=!lastLock || (active && (String(active.membershipId)!==String(lastLock.account) || active.membershipType!==lastLock.membershipType));
+      if(lockResultBox.hidden)return;
+      const ok=lastLock.status==='verified',running=lastLock.status==='running';
+      lockResultBox.classList.toggle('error',!ok);
+      lockResultBox.append(h('h3',ok?'Last lock changes verified':running?(busy?'Lock changes in progress':'Last lock attempt did not finish'):'Last lock batch stopped'),
+        h('small',new Date(lastLock.at).toLocaleString()),h('p',lastLock.accepted+' of '+lastLock.planned+' change requests accepted by Bungie'+(ok?' and verified.':'; the full batch is not verified.')));
+      if(lastLock.message)lockResultBox.append(h('p',lastLock.message));
+      if(!ok && !busy)lockResultBox.append(h('p','Run a fresh scan before applying more changes.'));
+      if(ok)lockResultBox.append(h('p',count(lastLock.locked,'copy','copies')+' locked; '+count(lastLock.unlocked,'copy','copies')+' unlocked. '+(lastLock.checklistSaved?'Checklist saved.':'Checklist was not saved.')));
+      if(lastLock.unconfirmed?.length){const details=h('details');details.open=true;details.append(h('summary',count(lastLock.unconfirmed.length,'copy','copies')+' not confirmed'));
+        for(const item of lastLock.unconfirmed)details.append(h('p',item.name+' · '+item.location+' · expected '+(item.expectedLocked?'locked':'unlocked')+' · '+item.itemId));lockResultBox.append(details);}
+      if(lastLock.excluded?.length){const details=h('details');details.append(h('summary',count(lastLock.excluded.length,'copy','copies')+' left for review; excluded from this lock batch'));
+        for(const item of lastLock.excluded)details.append(h('p',item.name+' · '+item.reason),h('small',item.itemId));lockResultBox.append(details);}
+      if(lockStorageWarning)lockResultBox.append(h('p',lockStorageWarning,'scan-warning'));
+      const exportResult=button('Export last lock result',()=>download(lastLock,kind+'-lock-result.json'));exportResult.dataset.edit='';exportResult.disabled=busy;lockResultBox.append(exportResult);
+    }
     function updateButtons(){scanButton.disabled=refreshButton.disabled=busy || !api.connected();sampleButton.disabled=busy;accountSelect.disabled=busy;exportLast.disabled=busy || !lastReport;body.querySelectorAll('[data-apply]').forEach(b=>b.disabled=busy || demo || b.dataset.empty==='true');body.querySelectorAll('select, [data-edit], .scan-fields input').forEach(b=>b.disabled=busy || b.dataset.unavailable==='true');connActions.querySelectorAll('button').forEach(b=>b.disabled=busy);}
-    async function run(action){if(busy)return;busy=true;updateButtons();try{await action();}catch(e){status(e.message || 'The scan could not finish.',true);}finally{busy=false;updateButtons();}}
+    async function run(action){if(busy)return;busy=true;updateButtons();try{await action();}catch(e){status(e.message || 'The scan could not finish.',true);}finally{busy=false;showLockResult();updateButtons();}}
     async function refreshConnection(){
       connection.open=!api.connected();accountSelect.hidden=!api.connected();updateButtons();
       if(api.connected() && !client){await run(async()=>{status('Finding Destiny accounts…');accounts=await api.memberships();accountSelect.replaceChildren();if(!accounts.length)throw new Error('No active Destiny 2 account was found.');
@@ -225,8 +251,27 @@
           backup();status('Rechecking inventory and locking the selected copies…');
           // Clear the preview even after partial failure. A new scan is required to retry.
           const current=result;
-          try{await core.executeLocks(plan,client,current,done=>status(done.length+' lock changes applied…'));await saveScan(false);lastReport.lockResult={status:'verified'};status('Checklist saved. '+(kind==='armor'?armorChangeText()+' ':'')+'Keeper locks and duplicate unlocks verified.');}
-          catch(error){lastReport.lockResult={status:'failed',message:error.message,completed:error.completed || []};throw error;}
+          const plannedIds=new Set(plan.flatMap(g=>g.copies.map(i=>i.id)));
+          const outcome={version:1,status:'running',at:new Date().toISOString(),kind,account:current.account,membershipType:current.membershipType,planned:changes,accepted:0,locked:0,unlocked:0,checklistSaved:false,
+            excluded:current.items.filter(i=>(i.kind===kind || i.kind==='unknown') && !plannedIds.has(i.id)).map(i=>({itemId:i.id,name:i.name,reason:current.review.find(r=>r.id===i.id)?.reason || i.lockIssue || 'A copy of this item family needs review'}))};
+          rememberLockResult({...outcome});
+          let lockVerified=false;
+          try{
+            const completed=await core.executeLocks(plan,client,current,(done,step)=>{
+              const action=step?.phase==='verify-final'?'Checking the final lock states':step?.phase==='verify-keeper'?'Verifying keeper: '+step.name:(step?.phase==='unlock'?'Unlocking: ':'Locking: ')+(step?.name || 'selected copies');
+              status(done.length+' of '+changes+' change requests accepted. '+action+(step?.retrying?' (waiting for Bungie to update)':'')+'…');
+              if(step?.accepted)rememberLockResult({...outcome,accepted:done.length});
+            });
+            lockVerified=true;Object.assign(outcome,{status:'verified',accepted:completed.length,locked:completed.filter(c=>c.state).length,unlocked:completed.filter(c=>!c.state).length,completed});
+            lastReport.lockResult={...outcome};rememberLockResult({...outcome});
+            await saveScan(false);outcome.checklistSaved=true;lastReport.lockResult={...outcome};rememberLockResult({...outcome});
+            status('Checklist saved. '+(kind==='armor'?armorChangeText()+' ':'')+count(completed.length,'lock change')+' verified by Bungie.'+(outcome.excluded.length?' '+count(outcome.excluded.length,'copy','copies')+' left for review and not changed.':''));
+          }
+          catch(error){
+            const failure=lockVerified?{...outcome,message:'Game locks were verified, but saving the checklist failed: '+error.message}:
+              {...outcome,status:'failed',message:error.message,accepted:error.completed?.length || 0,completed:error.completed || [],failure:error.lockFailure,unconfirmed:error.unconfirmed || []};
+            lastReport.lockResult=failure;rememberLockResult(failure);if(lockVerified)error.message=failure.message;throw error;
+          }
           finally{result=null;report.replaceChildren();}
         }),'primary');apply.dataset.apply='';apply.dataset.empty=String(changes===0);actions.append(apply);
       }
@@ -256,6 +301,7 @@
       status('Saved '+count(Object.keys(result.patches).length,'checklist entry','checklist entries')+'. A backup of the previous marks is available below.');
     }
     function download(data,name){const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=h('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+    showLockResult();
     if(api.connected()){connection.open=false;}else{connection.open=true;}
     return {open:()=>{dialog.showModal();refreshConnection();}};
   }

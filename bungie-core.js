@@ -207,10 +207,11 @@
     for (const item of items) {
       if (item.kind==='unknown') { review.push({...item,reason:item.problem});continue; }
       if (item.kind !== catalog.kind) continue;
+      // Lock-only exotic weapons need a known identity, not a readable roll.
+      // Armor still requires its full combination before any duplicate decision.
+      if (item.kind === 'weapon' && item.exotic) { exoticWeapons.push(item); continue; }
       if (item.problem) { review.push({...item,reason:item.problem}); continue; }
       if (catalog.kind === 'weapon') {
-        // Every exotic weapon is kept and locked; it never needs a catalog roll match.
-        if (item.exotic) { exoticWeapons.push(item); continue; }
         const options = weaponOptions(item,catalog.weapons);
         const mapped = mappings[item.itemHash];
         const weapon = mapped !== undefined ? options.find(w=>String(w.id) === String(mapped)) : options.length === 1 ? options[0] : null;
@@ -381,49 +382,67 @@
     return byId;
   }
 
-  async function executeLocks(plan, client, original, onProgress=()=>{}) {
+  async function executeLocks(plan, client, original, onProgress=()=>{}, {wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}) {
+    const completed = [];
+    let operation={phase:'preflight'};
+    const target=(phase,item)=>({phase,itemId:item.id,name:item.name,location:item.location});
+    // Retry reads only. A successful write can take time to appear in a read;
+    // a failed write is never retried automatically.
+    async function confirm(read,accept){
+      for(const delay of [0,500,1000,2000]){
+        if(delay){onProgress(completed,{...operation,retrying:true});await wait(delay);}
+        if(accept(await read()))return true;
+      }
+      return false;
+    }
+    async function write(item,state){
+      operation=target(state?'lock':'unlock',item);onProgress(completed,operation);
+      await client.setLock(item,state);completed.push({itemId:item.id,state});
+      onProgress(completed,{...operation,accepted:true});
+    }
+    try {
     const fresh = await client.profile();
     const byId = validatePlan(plan,original,fresh);
-    const completed = [];
-    try {
     for (const group of plan) {
       // Manually flagged "don't keep" review copies: just unlock them (no keeper).
       if (group.manualUnlock) {
         for (const item of group.unlocks) {
           const cur = byId.get(item.id);
-          if (cur.locked) { await client.setLock(cur,false); completed.push({itemId:cur.id,state:false}); onProgress(completed); }
+          if (cur.locked) await write({...cur,name:item.name},false);
         }
         continue;
       }
-      const keeper = byId.get(group.keeper.id);
+      const keeper = {...byId.get(group.keeper.id),name:group.keeper.name};
       // Lock and verify the selected copy before making any duplicate easier to dismantle.
       if (!keeper.locked) {
-        await client.setLock(keeper,true);
-        completed.push({itemId:keeper.id,state:true}); onProgress(completed);
+        await write(keeper,true);
       }
-      const check = await client.item(keeper);
-      if (!(check.item?.data?.state & 1)) throw Object.assign(new Error('Keeper lock could not be verified. Duplicate unlocks stopped.'),{completed});
+      operation=target('verify-keeper',keeper);onProgress(completed,operation);
+      const confirmed=await confirm(()=>client.item(keeper),check=>
+        id(check.item?.data?.itemInstanceId)===keeper.id && !!(check.item.data.state & 1));
+      if (!confirmed) throw new Error('Keeper lock could not be verified. Duplicate unlocks stopped.');
       for (const duplicate of group.unlocks) {
-        await client.setLock(byId.get(duplicate.id),false);
-        completed.push({itemId:duplicate.id,state:false}); onProgress(completed);
+        await write({...byId.get(duplicate.id),name:duplicate.name},false);
       }
     }
-    const verified = new Map(inventory(await client.profile()).map(i=>[i.id,i]));
-    for (const group of plan) {
-      if (group.manualUnlock) {
-        if (group.unlocks.some(i=>verified.get(i.id)?.locked !== false)) {
-          throw Object.assign(new Error('Bungie has not confirmed every lock change. Scan again to see current status.'),{completed});
-        }
-        continue;
-      }
-      if (!verified.get(group.keeper.id)?.locked || group.duplicates.some(i=>verified.get(i.id)?.locked !== false)) {
-        throw Object.assign(new Error('Bungie has not confirmed every lock change. Scan again to see current status.'),{completed});
-      }
-    }
+    operation={phase:'verify-final'};onProgress(completed,operation);
+    const expected=plan.flatMap(group=>group.manualUnlock?group.unlocks.map(item=>({item,state:false})):
+      [{item:group.keeper,state:true},...group.duplicates.map(item=>({item,state:false}))]);
+    let unconfirmed=[];
+    const confirmed=await confirm(()=>client.profile(),profile=>{
+      if(String(profile.profile?.data?.userInfo?.membershipId)!==String(original.account) || profile.profile?.data?.userInfo?.membershipType!==original.membershipType)
+        throw new Error('The connected account changed during verification. Scan again.');
+      const verified=new Map(inventory(profile).map(i=>[i.id,i]));
+      unconfirmed=expected.filter(({item,state})=>verified.get(item.id)?.locked!==state)
+        .map(({item,state})=>({itemId:item.id,name:item.name,location:item.location,expectedLocked:state,observedLocked:verified.get(item.id)?.locked ?? null}));
+      return !unconfirmed.length;
+    });
+    if(!confirmed)throw Object.assign(new Error('Bungie has not confirmed every lock change. Scan again to see current status.'),{unconfirmed});
     return completed;
     } catch (error) {
-      error.completed=completed;
-      if (completed.length) error.message += ' '+completed.length+' changes were already applied. Scan again before retrying.';
+      error.completed=completed;error.lockFailure=operation;
+      if(operation.itemId)error.message+=' Item: '+operation.name+' · '+operation.location+' · '+operation.itemId+'.';
+      error.message+=' Bungie accepted '+completed.length+' change request'+(completed.length===1?'':'s')+' before this stopped; the full batch is not verified. Scan again before retrying.';
       throw error;
     }
   }
