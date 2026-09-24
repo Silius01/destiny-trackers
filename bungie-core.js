@@ -518,6 +518,17 @@
       message:'Current states checked; no lock requests were sent. '+(pending?(old?'Inventory data still predates the batch. ':'')+'Some states remain unconfirmed.':
         incomplete?'Sent changes are confirmed. Run a fresh scan to review changes that were not sent.':'All planned lock states are confirmed.')};
   }
+  async function autoRecheckLockResult(result,client,onProgress=()=>{}, {wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
+    if(!result.pendingVerification || !result.completed?.length)return result;
+    const scheduledFor=new Date(Date.now()+30000).toISOString();
+    onProgress({state:'waiting',scheduledFor});
+    await wait(30000);
+    onProgress({state:'checking',scheduledFor});
+    // One read-only pass after the batch. Never resume skipped writes or start
+    // another apply operation, even if the keeper is now confirmed locked.
+    const checked=recheckLockResult(result,await client.profile());
+    return {...checked,autoRecheck:{state:'completed',scheduledFor,at:checked.checkedAt}};
+  }
   // Only inventory identities belong in the comparison. Moves, locks, Power,
   // duplicate counts and keeper choices do not create another roll combination.
   function armorScanSnapshot(result) {
@@ -557,5 +568,5 @@
     }
     return next;
   }
-  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,weaponReviewRolls,scan,lockPlan,validatePlan,executeLocks,recheckLockResult,weaponRecord,applyRecords,weaponDiagnostics,armorDiagnostics,armorLockBlockers,armorScanSnapshot,compareArmorScans};
+  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,weaponReviewRolls,scan,lockPlan,validatePlan,executeLocks,recheckLockResult,autoRecheckLockResult,weaponRecord,applyRecords,weaponDiagnostics,armorDiagnostics,armorLockBlockers,armorScanSnapshot,compareArmorScans};
 });

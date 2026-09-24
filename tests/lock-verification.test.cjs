@@ -158,3 +158,68 @@ test('recheck separates confirmed sent locks from deferred duplicate unlocks',as
   assert.equal(result.status,'partial');assert.equal(result.pendingVerification,false);assert.equal(result.locked,1);
   assert.match(result.message,/changes that were not sent/);assert.equal(result.unconfirmed[0].itemId,duplicate.id);assert.equal(f.calls.length,1);
 });
+
+async function pendingBatch(duplicates=false){
+  const f=fixture(),before=structuredClone(f.profile),read=f.client.profile;
+  f.client.profile=async()=>structuredClone(before);
+  if(duplicates)f.client.item=async i=>({item:{data:{itemInstanceId:i.id,state:0}}});
+  let error;
+  try{await core.executeLocks(duplicates?f.plan:f.plan.map(g=>({...g,unlocks:[],duplicates:[]})),f.client,f.result,()=>{},noWait);}catch(e){error=e;}
+  assert.equal(error?.pendingVerification,true);f.client.profile=read;
+  return {...f,before,previous:{at:new Date().toISOString(),account:f.result.account,membershipType:f.result.membershipType,
+    status:'pending',pendingVerification:true,planned:duplicates?2:1,accepted:error.completed.length,completed:error.completed,
+    expected:error.expected,skippedGroups:error.skippedGroups,unconfirmed:error.unconfirmed,checklistSaved:true}};
+}
+
+test('automatic follow-up waits 30 seconds, reads once, and confirms locks without more writes',async()=>{
+  const f=await pendingBatch(),previous=structuredClone(f.previous),events=[],read=f.client.profile;
+  f.client.profile=async()=>{events.push('profile');return read();};
+  f.client.item=async()=>assert.fail('The follow-up only needs one inventory read');
+  f.client.setLock=async()=>assert.fail('The follow-up must never send writes');
+  const checked=await core.autoRecheckLockResult(f.previous,f.client,step=>events.push(step.state),{wait:async ms=>events.push(ms)});
+  assert.deepEqual(events,['waiting',30000,'checking','profile']);assert.deepEqual(f.previous,previous);
+  assert.equal(checked.status,'verified');assert.equal(checked.locked,1);assert.equal(checked.autoRecheck.state,'completed');
+  assert.equal(checked.autoRecheck.at,checked.checkedAt);assert.ok(Number.isFinite(Date.parse(checked.autoRecheck.scheduledFor)));
+  assert.equal(checked.checklistSaved,true);assert.equal(f.calls.length,1);
+});
+
+test('automatic follow-up remains pending if data has not caught up and does not loop',async()=>{
+  const f=await pendingBatch(),previous=structuredClone(f.previous);let reads=0,waits=0;
+  f.client.profile=async()=>{reads++;return structuredClone(f.before);};
+  const checked=await core.autoRecheckLockResult(f.previous,f.client,()=>{},{wait:async()=>{waits++;}});
+  assert.equal(reads,1);assert.equal(waits,1);assert.equal(checked.status,'pending');assert.equal(checked.locked,0);
+  assert.equal(checked.autoRecheck.state,'completed');assert.deepEqual(f.previous,previous);assert.equal(f.calls.length,1);
+});
+
+test('automatic follow-up confirms the keeper but never executes previously skipped duplicate unlocks',async()=>{
+  const f=await pendingBatch(true),checked=await core.autoRecheckLockResult(f.previous,f.client,()=>{},noWait);
+  assert.equal(checked.status,'partial');assert.equal(checked.pendingVerification,false);assert.equal(checked.locked,1);
+  assert.equal(checked.skippedGroups.length,1);assert.equal(checked.skippedGroups[0].protectedDuplicates.length,1);
+  assert.match(checked.message,/changes that were not sent/);assert.deepEqual(f.calls.map(c=>c[1]),[true]);
+});
+
+test('automatic follow-up leaves the retained result intact when the inventory read fails',async()=>{
+  const f=await pendingBatch(),previous=structuredClone(f.previous);
+  f.client.profile=async()=>{throw new Error('Read service unavailable');};
+  await assert.rejects(()=>core.autoRecheckLockResult(f.previous,f.client,()=>{},noWait),/Read service unavailable/);
+  assert.deepEqual(f.previous,previous);assert.equal(f.calls.length,1);
+});
+
+test('automatic follow-up rejects stale and wrong-account inventory without altering the pending result',async()=>{
+  const f=await pendingBatch(),previous=structuredClone(f.previous);
+  for(const issue of ['stale','account']){
+    f.client.profile=async()=>{const p=structuredClone(f.profile);
+      if(issue==='stale')p.responseMintedTimestamp=new Date(Date.now()-181000).toISOString();
+      else p.profile.data.userInfo.membershipId='999';return p;};
+    await assert.rejects(()=>core.autoRecheckLockResult(f.previous,f.client,()=>{},noWait),issue==='stale'?/stale/:/account changed/);
+    assert.deepEqual(f.previous,previous);
+  }
+  assert.equal(f.calls.length,1);
+});
+
+test('automatic follow-up is unnecessary for confirmed results or a batch with no accepted changes',async()=>{
+  const client={profile:async()=>assert.fail('No follow-up read should be needed')},wait={wait:async()=>assert.fail('No wait should be needed')};
+  for(const previous of [{pendingVerification:false,completed:[{itemId:'1',state:true}]},{pendingVerification:true,completed:[]}]){
+    assert.equal(await core.autoRecheckLockResult(previous,client,()=>assert.fail('No progress expected'),wait),previous);
+  }
+});

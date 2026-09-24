@@ -72,6 +72,13 @@
         h('small',new Date(lastLock.at).toLocaleString()),h('p',lastLock.accepted+' of '+lastLock.planned+' change requests accepted by Bungie'+(ok?' and verified.':'; the full batch is not verified.')));
       if(lastLock.message)lockResultBox.append(h('p',lastLock.message));
       if(lastLock.checkedAt)lockResultBox.append(h('small','Last checked: '+new Date(lastLock.checkedAt).toLocaleString()));
+      const followUp=lastLock.autoRecheck;
+      if(followUp?.state==='waiting' || followUp?.state==='checking')lockResultBox.append(h('p',busy?
+        followUp.state==='waiting'?'Automatic recheck scheduled for '+new Date(followUp.scheduledFor).toLocaleTimeString()+'. Keep this page open.':'Automatically rescanning current lock states…':
+        'The automatic recheck was interrupted. Use Check current lock states below.'));
+      if(followUp?.state==='completed')lockResultBox.append(h('p','Automatic rescan finished. No additional lock or unlock requests were sent.'));
+      if(followUp?.state==='failed')lockResultBox.append(h('p','Automatic rescan could not finish: '+followUp.error));
+      if(lastLock.checklistError)lockResultBox.append(h('p','Checklist save failed: '+lastLock.checklistError));
       if(!ok && !busy)lockResultBox.append(h('p',pending?'Accepted requests may already have taken effect. Recheck their current states below.':'Run a fresh scan before applying more changes.'));
       if(ok || partial || pending)lockResultBox.append(h('p','Verified: '+count(lastLock.locked,'copy','copies')+' locked; '+count(lastLock.unlocked,'copy','copies')+' unlocked. '+(lastLock.checklistSaved?'Checklist saved.':'Checklist was not saved.')));
       if(lastLock.skippedGroups?.length){const details=h('details');details.open=true;details.append(h('summary',count(lastLock.skippedGroups.length,'group')+' skipped; other groups were allowed to continue'));
@@ -88,7 +95,7 @@
         const recheck=button('Check current lock states',()=>run(async()=>{
           if(!client || !api.connected())throw new Error('Connect to Bungie to recheck current states.');
           const previous=lastLock;status('Reading current lock states; no changes will be sent…');
-          const checked=core.recheckLockResult(previous,await client.profile());rememberLockResult(checked);
+          const checked=core.recheckLockResult(previous,await client.profile());delete checked.autoRecheck;rememberLockResult(checked);
           if(lastReport?.lockResult?.at===previous.at)lastReport.lockResult={...checked};
           status(checked.message,checked.status==='pending');
         }));recheck.dataset.edit='';recheck.disabled=busy;lockResultBox.append(recheck);
@@ -287,8 +294,22 @@
               const verified=error.verifiedChanges || [];
               Object.assign(outcome,{status:error.pendingVerification?'pending':'partial',pendingVerification:!!error.pendingVerification,message:error.message,accepted:error.completed.length,completed:error.completed,skippedGroups:error.skippedGroups,
                 locked:verified.filter(c=>c.state).length,unlocked:verified.filter(c=>!c.state).length,verifiedChanges:verified,unconfirmed:error.unconfirmed || [],expected:error.expected,verificationReads:error.verificationReads});
-              try{await saveScan(false);outcome.checklistSaved=true;}catch(saveError){outcome.message+=' Checklist save failed: '+saveError.message;}
-              lastReport.lockResult={...outcome};rememberLockResult({...outcome});status(outcome.message,true);return;
+              try{await saveScan(false);outcome.checklistSaved=true;}catch(saveError){outcome.checklistError=saveError.message;}
+              lastReport.lockResult={...outcome};rememberLockResult({...outcome});status(outcome.message,true);
+              if(outcome.pendingVerification && outcome.completed.length){
+                try{
+                  const checked=await core.autoRecheckLockResult(outcome,client,step=>{
+                    outcome.autoRecheck=step;lastReport.lockResult={...outcome};rememberLockResult({...outcome});
+                    status(step.state==='waiting'?'Batch finished. Waiting 30 seconds before automatically rescanning unverified lock states…':'Automatically rescanning unverified lock states…');
+                  });
+                  Object.assign(outcome,checked);status('Automatic rescan finished. '+checked.message,checked.status==='pending');
+                }catch(recheckError){
+                  outcome.autoRecheck={...outcome.autoRecheck,state:'failed',error:recheckError.message};
+                  status('Automatic rescan could not finish: '+recheckError.message+' The previous lock result is retained.',true);
+                }
+                lastReport.lockResult={...outcome};rememberLockResult({...outcome});
+              }
+              return;
             }
             const failure=lockVerified?{...outcome,message:'Game locks were verified, but saving the checklist failed: '+error.message}:
               {...outcome,status:'failed',message:error.message,accepted:error.completed?.length || 0,completed:error.completed || [],failure:error.lockFailure,unconfirmed:error.unconfirmed || [],skippedGroups:error.skippedGroups || [],expected:error.expected,verificationReads:error.verificationReads};

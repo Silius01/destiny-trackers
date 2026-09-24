@@ -86,7 +86,9 @@ VaultBungie.definitions=async()=>sample().defs;
 VaultBungie.client=()=>{
   const params=new URLSearchParams(location.search),reads=new Map();let writes=0,finalReads=0,cacheReads=0,before;
   const rows=()=>[...sample().profile.profileInventory.data.items,...sample().profile.characterInventories.data['100'].items];
-  return {profile:async()=>{const cached=params.has('lock-cache') && writes && ++cacheReads<=7;
+  return {profile:async()=>{if(writes)cacheReads++;
+      if(params.has('auto-fail') && cacheReads>7)throw new Error('Synthetic automatic inventory read failure');
+      const cached=params.has('lock-cache') && writes && (cacheReads<=7 || params.has('lock-cache-stuck'));
       const p=structuredClone(cached || (params.has('lock-delay') && writes && ++finalReads<3)?before:sample().profile);
       if(!cached)p.responseMintedTimestamp=new Date().toISOString();
       if(params.has('lock-skip'))p.characterInventories.data['100'].items.find(i=>i.itemInstanceId==='900719925474099103').state=0;return p;},
@@ -98,6 +100,10 @@ VaultBungie.client=()=>{
 if(new URLSearchParams(location.search).has('fast-waits')){
   const execute=VaultScanCore.executeLocks;
   VaultScanCore.executeLocks=(plan,client,result,progress)=>execute(plan,client,result,progress,{wait:async()=>{}});
+}
+if(new URLSearchParams(location.search).has('fast-auto-wait')){
+  const recheck=VaultScanCore.autoRecheckLockResult;
+  VaultScanCore.autoRecheckLockResult=(result,client,progress)=>recheck(result,client,progress,{wait:async()=>{}});
 }
 if(new URLSearchParams(location.search).has('aged')){
   const scan=VaultScanCore.scan;
