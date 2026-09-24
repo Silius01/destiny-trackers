@@ -118,7 +118,7 @@ test('keeper lock failure or unverified lock cannot unlock a duplicate',async()=
   for(const mode of ['failure','unverified']){
     const {result,profile}=fresh();const calls=[];
     const client={profile:async()=>profile,setLock:async(i,state)=>{calls.push(state);if(mode==='failure')throw new Error('API unavailable');},item:async()=>({item:{data:{state:0}}})};
-    await assert.rejects(()=>core.executeLocks(core.lockPlan(result),client,result));assert.deepEqual(calls,[true]);
+    await assert.rejects(()=>core.executeLocks(core.lockPlan(result),client,result,()=>{},{wait:async()=>{}}));assert.deepEqual(calls,[true]);
   }
 });
 test('published app inline scripts parse and preserve scan metadata during normalization',()=>{

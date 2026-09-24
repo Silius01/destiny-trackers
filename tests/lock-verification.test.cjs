@@ -84,11 +84,77 @@ test('unverified Deliverance protects its duplicates while an unrelated weapon i
     assert.equal(e.skippedGroups[0].protectedDuplicates.length,1);assert.equal(e.completed.length,2);
     assert.deepEqual(e.verifiedChanges,[{itemId:otherId,state:true}]);assert.equal(e.unconfirmed[0].itemId,base);return true;
   });
-  assert.deepEqual(f.calls,[[base,true],[otherId,true]]);assert.ok(progress.some(s=>s.phase==='group-skipped'));
+  assert.deepEqual(f.calls,[[base,true],[otherId,true]]);assert.ok(progress.some(s=>s.phase==='keeper-pending'));
 });
 
 test('a read API failure stops writes instead of treating it as an item-local skip',async()=>{
   const f=fixture();f.client.item=async()=>{throw new Error('Bungie sign-in expired');};
   await assert.rejects(()=>core.executeLocks(f.plan,f.client,f.result,()=>{},noWait),e=>!e.partial && /sign-in expired/.test(e.message));
   assert.deepEqual(f.calls.map(c=>c[1]),[true]);
+});
+
+test('26 lock-only keepers use one shared inventory confirmation without individual item reads',async()=>{
+  const f=fixture(),base=f.plan[0].keeper.id;
+  f.profile.profileInventory.data.items=[];f.profile.characterInventories.data['100'].items=[];
+  for(let n=0;n<26;n++){
+    const itemId='691753020020160'+String(1800+n);
+    f.profile.profileInventory.data.items.push({itemHash:111,itemInstanceId:itemId,state:0});
+    for(const component of ['instances','sockets','reusablePlugs'])f.profile.itemComponents[component].data[itemId]=structuredClone(f.profile.itemComponents[component].data[base]);
+  }
+  f.defs.items[111].inventory={tierType:6};
+  const result=core.scan(f.profile,f.defs,catalog),plan=core.lockPlan(result),read=f.client.profile;let profiles=0;
+  f.client.profile=async()=>{profiles++;return read();};f.client.item=async()=>assert.fail('No per-item polling for lock-only groups');
+  const done=await core.executeLocks(plan,f.client,result,()=>{},noWait);
+  assert.equal(done.length,26);assert.equal(profiles,2);assert.equal(f.calls.length,26);
+});
+
+test('shared polling waits for newer data and verifies a deferred keeper before unlocking',async()=>{
+  const f=fixture(),before=structuredClone(f.profile),read=f.client.profile,write=f.client.setLock;let elapsed=0,profiles=0;
+  f.client.item=async i=>({item:{data:{itemInstanceId:i.id,state:0}}});
+  f.client.profile=async()=>{profiles++;return elapsed<30000?structuredClone(before):read();};
+  f.client.setLock=async(i,state)=>{if(!state)assert.ok(elapsed>=30000);return write(i,state);};
+  const done=await core.executeLocks(f.plan,f.client,f.result,()=>{},{wait:async ms=>{elapsed+=ms;}});
+  assert.equal(done.length,2);assert.equal(f.calls.length,2);assert.ok(profiles<10);
+});
+
+test('expired verification responses wait and become pending without authorizing duplicate unlocks',async()=>{
+  const f=fixture(),read=f.client.profile;let profiles=0;
+  f.client.item=async i=>({item:{data:{itemInstanceId:i.id,state:0}}});
+  f.client.profile=async()=>{const p=await read();if(++profiles>1)p.responseMintedTimestamp=new Date(Date.now()-181000).toISOString();return p;};
+  await assert.rejects(()=>core.executeLocks(f.plan,f.client,f.result,()=>{},noWait),e=>{
+    assert.equal(e.pendingVerification,true);assert.equal(e.partial,true);assert.equal(e.verificationReads.length,7);
+    assert.ok(e.verificationReads.every(r=>r.expired));assert.deepEqual(e.verifiedChanges,[]);return true;
+  });assert.deepEqual(f.calls.map(c=>c[1]),[true]);
+});
+
+test('read-only recheck resolves accepted locks once current inventory catches up',async()=>{
+  const f=fixture(),before=structuredClone(f.profile),read=f.client.profile;
+  const lockOnly=f.plan.map(g=>({...g,unlocks:[],duplicates:[]}));f.client.profile=async()=>structuredClone(before);
+  let pending;try{await core.executeLocks(lockOnly,f.client,f.result,()=>{},noWait);}catch(e){pending=e;}
+  assert.equal(pending.pendingVerification,true);
+  const result=core.recheckLockResult({at:new Date().toISOString(),account:f.result.account,membershipType:f.result.membershipType,
+    planned:1,accepted:1,completed:pending.completed,expected:pending.expected,skippedGroups:pending.skippedGroups,checklistSaved:true},await read());
+  assert.equal(result.status,'verified');assert.equal(result.locked,1);assert.equal(result.unconfirmed.length,0);assert.equal(f.calls.length,1);
+});
+
+test('recheck of a legacy interrupted batch retains unsent changes and protected duplicates',async()=>{
+  const f=fixture(),keeper=f.plan[0].keeper,duplicate=f.plan[0].unlocks[0];await f.client.setLock(keeper,true);
+  const previous={account:f.result.account,membershipType:f.result.membershipType,planned:83,accepted:1,
+    completed:[{itemId:keeper.id,state:true}],skippedGroups:[{itemId:keeper.id,name:keeper.name,protectedDuplicates:[{itemId:duplicate.id}]}]};
+  const result=core.recheckLockResult(previous,f.profile);
+  assert.equal(result.status,'partial');assert.equal(result.locked,1);assert.equal(result.skippedGroups.length,1);
+  assert.match(result.skippedGroups[0].reason,/now confirmed/);assert.equal(f.calls.length,1);
+  const other=structuredClone(f.profile);other.profile.data.userInfo.membershipId='999';
+  assert.throws(()=>core.recheckLockResult(previous,other),/account changed/);
+  const stale=structuredClone(f.profile);stale.responseMintedTimestamp=new Date(Date.now()-181000).toISOString();
+  assert.throws(()=>core.recheckLockResult(previous,stale),/stale/);
+});
+
+test('recheck separates confirmed sent locks from deferred duplicate unlocks',async()=>{
+  const f=fixture(),keeper=f.plan[0].keeper,duplicate=f.plan[0].unlocks[0];await f.client.setLock(keeper,true);
+  const result=core.recheckLockResult({account:f.result.account,membershipType:f.result.membershipType,planned:2,accepted:1,
+    completed:[{itemId:keeper.id,state:true}],expected:[{itemId:keeper.id,expectedLocked:true},{itemId:duplicate.id,expectedLocked:false}],
+    skippedGroups:[{itemId:keeper.id,protectedDuplicates:[{itemId:duplicate.id}]}]},f.profile);
+  assert.equal(result.status,'partial');assert.equal(result.pendingVerification,false);assert.equal(result.locked,1);
+  assert.match(result.message,/changes that were not sent/);assert.equal(result.unconfirmed[0].itemId,duplicate.id);assert.equal(f.calls.length,1);
 });

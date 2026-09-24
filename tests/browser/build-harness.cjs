@@ -84,15 +84,21 @@ VaultBungie.connected=()=>true;
 VaultBungie.memberships=async()=>[{membershipType:3,membershipId:'1234567890123456789',displayName:'Synthetic QA inventory'}];
 VaultBungie.definitions=async()=>sample().defs;
 VaultBungie.client=()=>{
-  const params=new URLSearchParams(location.search),reads=new Map();let writes=0,finalReads=0,before;
+  const params=new URLSearchParams(location.search),reads=new Map();let writes=0,finalReads=0,cacheReads=0,before;
   const rows=()=>[...sample().profile.profileInventory.data.items,...sample().profile.characterInventories.data['100'].items];
-  return {profile:async()=>{const p=structuredClone(params.has('lock-delay') && writes && ++finalReads<3?before:sample().profile);p.responseMintedTimestamp=new Date().toISOString();
+  return {profile:async()=>{const cached=params.has('lock-cache') && writes && ++cacheReads<=7;
+      const p=structuredClone(cached || (params.has('lock-delay') && writes && ++finalReads<3)?before:sample().profile);
+      if(!cached)p.responseMintedTimestamp=new Date().toISOString();
       if(params.has('lock-skip'))p.characterInventories.data['100'].items.find(i=>i.itemInstanceId==='900719925474099103').state=0;return p;},
     item:async item=>{const raw=structuredClone(rows().find(i=>i.itemInstanceId===item.id)),n=(reads.get(item.id)||0)+1;reads.set(item.id,n);
       if(params.has('lock-unverified') || (params.has('lock-skip') && item.id==='900719925474099103') || (params.has('lock-delay') && n<3))raw.state&=~1;return {item:{data:raw}};},
     setLock:async(item,state)=>{if(params.has('lock-fail') && !state)throw new Error('Synthetic Bungie permission failure');if(!before)before=structuredClone(sample().profile);
       const raw=rows().find(i=>i.itemInstanceId===item.id);raw.state=state?raw.state|1:raw.state&~1;writes++;}};
 };
+if(new URLSearchParams(location.search).has('fast-waits')){
+  const execute=VaultScanCore.executeLocks;
+  VaultScanCore.executeLocks=(plan,client,result,progress)=>execute(plan,client,result,progress,{wait:async()=>{}});
+}
 if(new URLSearchParams(location.search).has('aged')){
   const scan=VaultScanCore.scan;
   VaultScanCore.scan=(profile,defs,catalog,mappings)=>scan(profile,defs,catalog,mappings,Date.now()-6*60*1000);

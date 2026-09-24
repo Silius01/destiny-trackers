@@ -113,5 +113,13 @@ test('failed keeper verification and failed final verification are reported for 
   await assert.rejects(()=>core.executeLocks(plan,client,result,()=>{},{wait:async()=>{}}),e=>e.partial && e.skippedGroups.length>0);
   assert.equal(actions.some(a=>a[0]==='set'&&a[2]===false),false);
   const f=fresh(),mock=fakeClient(f.profile);mock.setLock=async(i,state)=>{if(state)copies(f.profile).find(raw=>raw.itemInstanceId===i.id).state|=1;};
-  await assert.rejects(()=>core.executeLocks(core.lockPlan(f.result),mock,f.result),/not confirmed every lock change/);
+  await assert.rejects(()=>core.executeLocks(core.lockPlan(f.result),mock,f.result,()=>{},{wait:async()=>{}}),e=>e.pendingVerification && e.unconfirmed.length>0);
+});
+
+test('deferred armor keeper verification accounts for writes to other combinations of the same piece',async()=>{
+  const {profile,result}=fresh(),actions=[],client=fakeClient(profile,actions);
+  client.item=async i=>({item:{data:{itemInstanceId:i.id,state:0}}});
+  const completed=await core.executeLocks(core.lockPlan(result),client,result,()=>{},{wait:async()=>{}});
+  assert.equal(completed.length,3);assert.equal(copies(profile).find(i=>i.itemInstanceId===first).state&1,0);
+  for(const id of [best,other])assert.equal(copies(profile).find(i=>i.itemInstanceId===id).state&1,1);
 });

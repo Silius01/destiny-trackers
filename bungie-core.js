@@ -383,12 +383,22 @@
   }
 
   async function executeLocks(plan, client, original, onProgress=()=>{}, {wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}) {
-    const completed = [],skippedGroups=[],processed=[];
+    const completed = [],pending=[],verificationReads=[];
+    const expected=plan.flatMap(group=>group.manualUnlock?group.unlocks.map(item=>({itemId:item.id,name:item.name,location:item.location,expectedLocked:false})):
+      [{itemId:group.keeper.id,name:group.keeper.name,location:group.keeper.location,expectedLocked:true},
+        ...group.duplicates.map(item=>({itemId:item.id,name:item.name,location:item.location,expectedLocked:false}))]);
+    let skippedGroups=[];
     let operation={phase:'preflight'};
     const target=(phase,item)=>({phase,itemId:item.id,name:item.name,location:item.location});
-    function profileItems(profile){
+    function profileItems(profile,baseline){
       if(String(profile.profile?.data?.userInfo?.membershipId)!==String(original.account) || profile.profile?.data?.userInfo?.membershipType!==original.membershipType)
         throw new Error('The connected account changed during verification. Scan again.');
+      const minted=Date.parse(profile.responseMintedTimestamp),age=Date.now()-minted;
+      if(!Number.isFinite(minted) || age < -30000)throw new Error('Bungie returned invalid inventory timing. Scan again.');
+      verificationReads.push({at:new Date().toISOString(),minted:profile.responseMintedTimestamp,olderThanBatch:minted<=baseline,expired:age>180000});
+      // An old response is not evidence that an accepted write failed. Wait for
+      // newer data; never use an expired response to authorize another write.
+      if(age>180000)return null;
       return new Map(inventory(profile).map(i=>[i.id,i]));
     }
     // Retry reads only. A successful write can take time to appear in a read;
@@ -415,7 +425,6 @@
           const cur = byId.get(item.id);
           if (cur.locked) await write({...cur,name:item.name},false);
         }
-        processed.push(group);
         continue;
       }
       const keeper = {...byId.get(group.keeper.id),name:group.keeper.name};
@@ -423,62 +432,91 @@
       if (!keeper.locked) {
         await write(keeper,true);
       }
+      // Lock-only groups can be checked together in the final inventory read.
+      if(!group.unlocks.length)continue;
       operation=target('verify-keeper',keeper);onProgress(completed,operation);
       const observations=[];
-      let confirmed=await confirm(()=>client.item(keeper),check=>{
+      const confirmed=await confirm(()=>client.item(keeper),check=>{
         const raw=check?.item?.data,observedId=id(raw?.itemInstanceId),state=Number.isInteger(raw?.state)?!!(raw.state&1):null;
         observations.push({source:'item',itemId:observedId || null,locked:state});
         return observedId===keeper.id && state===true;
       });
       if(!confirmed){
-        operation=target('verify-inventory',keeper);onProgress(completed,operation);
-        const profile=await client.profile(),items=profileItems(profile),item=items.get(keeper.id);
-        observations.push({source:'inventory',itemId:item?.id || null,locked:item?.locked ?? null,minted:profile.responseMintedTimestamp});
-        if(item?.locked){
-          // Revalidate the whole family against the original preview, accounting
-          // only for writes this operation has already sent successfully.
-          const changed=new Map(completed.map(c=>[c.itemId,c.state]));
-          validatePlan([group],{...original,items:original.items.map(i=>changed.has(i.id)?{...i,locked:changed.get(i.id)}:i)},profile);
-          confirmed=true;
-        }
-      }
-      if(!confirmed){
-        const skipped={...target('verify-keeper',keeper),reason:'Keeper lock could not be verified. Duplicate unlocks skipped for this group.',
-          protectedDuplicates:group.unlocks.map(i=>({itemId:i.id,name:i.name})),observations};
-        skippedGroups.push(skipped);onProgress(completed,{...skipped,phase:'group-skipped',skippedGroups:[...skippedGroups]});
+        pending.push({group,keeper,observations});
+        onProgress(completed,{...target('keeper-pending',keeper),pendingGroups:pending.length});
         continue;
       }
       for (const duplicate of group.unlocks) {
         await write({...byId.get(duplicate.id),name:duplicate.name},false);
       }
-      processed.push(group);
     }
-    operation={phase:'verify-final'};onProgress(completed,operation);
-    const expected=processed.flatMap(group=>group.manualUnlock?group.unlocks.map(item=>({item,state:false})):
-      [{item:group.keeper,state:true},...group.duplicates.map(item=>({item,state:false}))]);
     let unconfirmed=[],verified;
-    const confirmed=await confirm(()=>client.profile(),profile=>{
-      verified=profileItems(profile);
-      unconfirmed=expected.filter(({item,state})=>verified.get(item.id)?.locked!==state)
-        .map(({item,state})=>({itemId:item.id,name:item.name,location:item.location,expectedLocked:state,observedLocked:verified.get(item.id)?.locked ?? null}));
-      return !unconfirmed.length;
-    });
-    if(!confirmed)throw Object.assign(new Error('Bungie has not confirmed every lock change. Scan again to see current status.'),{unconfirmed});
-    if(skippedGroups.length){
-      const verifiedChanges=completed.filter(c=>verified.get(c.itemId)?.locked===c.state);
-      const unresolved=skippedGroups.filter(g=>verified.get(g.itemId)?.locked!==true).map(g=>({itemId:g.itemId,name:g.name,location:g.location,expectedLocked:true,observedLocked:verified.get(g.itemId)?.locked ?? null}));
-      const skippedUnlocks=skippedGroups.reduce((n,g)=>n+g.protectedDuplicates.length,0);
-      operation={phase:'partial'};
-      throw Object.assign(new Error('Finished the other groups. '+skippedGroups.length+' keeper verification'+(skippedGroups.length===1?'':'s')+' could not finish; '+skippedUnlocks+' duplicate unlock'+(skippedUnlocks===1?' was':'s were')+' skipped. Scan again to retry these groups.'),
-        {partial:true,verifiedChanges,unconfirmed:unresolved});
+    const baseline=Date.parse(fresh.responseMintedTimestamp);
+    // One bounded wait for the whole batch, instead of repeating four reads
+    // and a full profile for every lock-only keeper against the same cache.
+    for(const delay of [0,1000,2000,4000,8000,15000,15000]){
+      operation={phase:'verify-final',retrying:!!delay};onProgress(completed,operation);
+      if(delay)await wait(delay);
+      let profile=await client.profile();verified=profileItems(profile,baseline);
+      for(const entry of pending)entry.observations.push({source:'inventory',itemId:verified?.get(entry.keeper.id)?.id || null,
+        locked:verified?.get(entry.keeper.id)?.locked ?? null,minted:profile.responseMintedTimestamp});
+      const ready=pending.filter(entry=>verified?.get(entry.keeper.id)?.locked===true);
+      if(ready.length){
+        const changed=new Map(completed.map(c=>[c.itemId,c.state]));
+        // Validate all ready families before writing, using this one snapshot.
+        validatePlan(ready.map(e=>e.group),{...original,items:original.items.map(i=>changed.has(i.id)?{...i,locked:changed.get(i.id)}:i)},profile);
+        for(const entry of ready){
+          for(const item of entry.group.unlocks)await write({...verified.get(item.id),name:item.name},false);
+          pending.splice(pending.indexOf(entry),1);
+        }
+        operation={phase:'verify-final'};onProgress(completed,operation);
+        profile=await client.profile();verified=profileItems(profile,baseline);
+      }
+      unconfirmed=expected.filter(item=>verified?.get(item.itemId)?.locked!==item.expectedLocked)
+        .map(item=>({...item,observedLocked:verified?.get(item.itemId)?.locked ?? null}));
+      if(!pending.length && !unconfirmed.length)return completed;
+      onProgress(completed,{phase:'waiting-inventory',pending:unconfirmed.length,observation:verificationReads.at(-1)});
     }
-    return completed;
+    skippedGroups=pending.map(({group,keeper,observations})=>({...target('verify-keeper',keeper),
+      reason:'Keeper confirmation is pending. Duplicate unlock requests were not sent.',
+      protectedDuplicates:group.unlocks.map(i=>({itemId:i.id,name:i.name})),observations}));
+    const verifiedChanges=completed.filter(c=>verified?.get(c.itemId)?.locked===c.state);
+    const old=verificationReads.at(-1)?.olderThanBatch || verificationReads.at(-1)?.expired;
+    operation={phase:'verify-final'};
+    throw Object.assign(new Error((old?'Bungie is still returning older inventory data. ':'')+
+      'Lock requests were accepted, but some current states are still awaiting confirmation. Use Check current lock states to recheck without sending changes.'),
+      {partial:true,pendingVerification:true,verifiedChanges,unconfirmed});
     } catch (error) {
-      error.completed=completed;error.lockFailure=operation;error.skippedGroups=skippedGroups;
+      if(!skippedGroups.length)skippedGroups=pending.map(({group,keeper,observations})=>({...target('verify-keeper',keeper),
+        reason:'Keeper confirmation did not finish. Duplicate unlock requests were not sent.',protectedDuplicates:group.unlocks.map(i=>({itemId:i.id,name:i.name})),observations}));
+      error.completed=completed;error.lockFailure=operation;error.skippedGroups=skippedGroups;error.verificationReads=verificationReads;error.expected=expected;
       if(operation.itemId)error.message+=' Item: '+operation.name+' · '+operation.location+' · '+operation.itemId+'.';
       if(!error.partial)error.message+=' Bungie accepted '+completed.length+' change request'+(completed.length===1?'':'s')+' before this stopped; the full batch is not verified. Scan again before retrying.';
       throw error;
     }
+  }
+  // Read-only reconciliation of a retained result, including older exports.
+  // It never resends a write or executes previously skipped duplicate unlocks.
+  function recheckLockResult(result,profile){
+    if(String(profile.profile?.data?.userInfo?.membershipId)!==String(result.account) || profile.profile?.data?.userInfo?.membershipType!==result.membershipType)
+      throw new Error('The connected account changed. Select the account used for this lock batch.');
+    const items=new Map(inventory(profile).map(i=>[i.id,i]));
+    const expected=result.expected || [...(result.completed || []).map(c=>({itemId:c.itemId,expectedLocked:c.state})),
+      ...(result.skippedGroups || []).map(g=>({itemId:g.itemId,name:g.name,location:g.location,expectedLocked:true}))];
+    if(!expected.length)throw new Error('This result has no lock states to recheck. Run a fresh scan.');
+    const unconfirmed=[...new Map(expected.filter(e=>items.get(e.itemId)?.locked!==e.expectedLocked)
+      .map(e=>[e.itemId,{...e,observedLocked:items.get(e.itemId)?.locked ?? null}])).values()];
+    const verifiedChanges=(result.completed || []).filter(c=>items.get(c.itemId)?.locked===c.state);
+    const skippedGroups=(result.skippedGroups || []).filter(g=>g.protectedDuplicates.length || items.get(g.itemId)?.locked!==true)
+      .map(g=>({...g,reason:items.get(g.itemId)?.locked===true?'Keeper is now confirmed locked. Skipped duplicate unlocks still need a fresh scan.':g.reason}));
+    const sentIds=new Set((result.completed || []).map(c=>c.itemId));
+    const pending=unconfirmed.some(e=>sentIds.has(e.itemId)),incomplete=result.accepted<result.planned || skippedGroups.length>0 || unconfirmed.length>0;
+    const old=Date.parse(profile.responseMintedTimestamp)<Date.parse(result.at);
+    return {...result,status:pending?'pending':incomplete?'partial':'verified',pendingVerification:pending,
+      checkedAt:new Date().toISOString(),inventoryMinted:profile.responseMintedTimestamp,expected,skippedGroups,unconfirmed,verifiedChanges,
+      locked:verifiedChanges.filter(c=>c.state).length,unlocked:verifiedChanges.filter(c=>!c.state).length,
+      message:'Current states checked; no lock requests were sent. '+(pending?(old?'Inventory data still predates the batch. ':'')+'Some states remain unconfirmed.':
+        incomplete?'Sent changes are confirmed. Run a fresh scan to review changes that were not sent.':'All planned lock states are confirmed.')};
   }
   // Only inventory identities belong in the comparison. Moves, locks, Power,
   // duplicate counts and keeper choices do not create another roll combination.
@@ -519,5 +557,5 @@
     }
     return next;
   }
-  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,weaponReviewRolls,scan,lockPlan,validatePlan,executeLocks,weaponRecord,applyRecords,weaponDiagnostics,armorDiagnostics,armorLockBlockers,armorScanSnapshot,compareArmorScans};
+  return {norm,id,inventory,resolve,rankWeapon,weaponOptions,weaponReviewRolls,scan,lockPlan,validatePlan,executeLocks,recheckLockResult,weaponRecord,applyRecords,weaponDiagnostics,armorDiagnostics,armorLockBlockers,armorScanSnapshot,compareArmorScans};
 });

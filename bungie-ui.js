@@ -65,23 +65,34 @@
       lockResultBox.replaceChildren();const active=accounts[Number(accountSelect.value)];
       lockResultBox.hidden=!lastLock || (active && (String(active.membershipId)!==String(lastLock.account) || active.membershipType!==lastLock.membershipType));
       if(lockResultBox.hidden)return;
-      const ok=lastLock.status==='verified',partial=lastLock.status==='partial',running=lastLock.status==='running';
+      const ok=lastLock.status==='verified',partial=lastLock.status==='partial',pending=lastLock.status==='pending',running=lastLock.status==='running';
       lockResultBox.classList.toggle('error',!ok);
-      lockResultBox.append(h('h3',ok?'Last lock changes verified':partial?'Lock batch finished with skipped groups':running?(busy?'Lock changes in progress':'Last lock attempt did not finish'):'Last lock batch stopped'),
+      lockResultBox.classList.toggle('pending',pending);
+      lockResultBox.append(h('h3',ok?'Last lock changes verified':pending?'Lock confirmation pending':partial?'Lock batch finished with skipped groups':running?(busy?'Lock changes in progress':'Last lock attempt did not finish'):'Last lock batch stopped'),
         h('small',new Date(lastLock.at).toLocaleString()),h('p',lastLock.accepted+' of '+lastLock.planned+' change requests accepted by Bungie'+(ok?' and verified.':'; the full batch is not verified.')));
       if(lastLock.message)lockResultBox.append(h('p',lastLock.message));
-      if(!ok && !busy)lockResultBox.append(h('p','Run a fresh scan before applying more changes.'));
-      if(ok || partial)lockResultBox.append(h('p','Verified: '+count(lastLock.locked,'copy','copies')+' locked; '+count(lastLock.unlocked,'copy','copies')+' unlocked. '+(lastLock.checklistSaved?'Checklist saved.':'Checklist was not saved.')));
+      if(lastLock.checkedAt)lockResultBox.append(h('small','Last checked: '+new Date(lastLock.checkedAt).toLocaleString()));
+      if(!ok && !busy)lockResultBox.append(h('p',pending?'Accepted requests may already have taken effect. Recheck their current states below.':'Run a fresh scan before applying more changes.'));
+      if(ok || partial || pending)lockResultBox.append(h('p','Verified: '+count(lastLock.locked,'copy','copies')+' locked; '+count(lastLock.unlocked,'copy','copies')+' unlocked. '+(lastLock.checklistSaved?'Checklist saved.':'Checklist was not saved.')));
       if(lastLock.skippedGroups?.length){const details=h('details');details.open=true;details.append(h('summary',count(lastLock.skippedGroups.length,'group')+' skipped; other groups were allowed to continue'));
         for(const group of lastLock.skippedGroups)details.append(h('p',group.name+' · '+group.location+' · '+group.reason),
           h('small','Instance '+group.itemId+' · '+count(group.protectedDuplicates.length,'duplicate unlock')+' skipped'));
         lockResultBox.append(details);}
       if(lastLock.unconfirmed?.length){const details=h('details');details.open=true;details.append(h('summary',count(lastLock.unconfirmed.length,'copy','copies')+' not confirmed'));
-        for(const item of lastLock.unconfirmed)details.append(h('p',item.name+' · '+item.location+' · expected '+(item.expectedLocked?'locked':'unlocked')+' · '+item.itemId));lockResultBox.append(details);}
+        for(const item of lastLock.unconfirmed)details.append(h('p',[item.name,item.location,'expected '+(item.expectedLocked?'locked':'unlocked'),item.itemId].filter(Boolean).join(' · ')));lockResultBox.append(details);}
       if(lastLock.excluded?.length){const details=h('details');details.append(h('summary',count(lastLock.excluded.length,'copy','copies')+' left for review; excluded from this lock batch'));
         for(const item of lastLock.excluded)details.append(h('p',item.name+' · '+item.reason),h('small',item.itemId));lockResultBox.append(details);}
       if(lockStorageWarning)lockResultBox.append(h('p',lockStorageWarning,'scan-warning'));
       const exportResult=button('Export last lock result',()=>download(lastLock,kind+'-lock-result.json'));exportResult.dataset.edit='';exportResult.disabled=busy;lockResultBox.append(exportResult);
+      if(lastLock.completed?.length || lastLock.expected?.length){
+        const recheck=button('Check current lock states',()=>run(async()=>{
+          if(!client || !api.connected())throw new Error('Connect to Bungie to recheck current states.');
+          const previous=lastLock;status('Reading current lock states; no changes will be sent…');
+          const checked=core.recheckLockResult(previous,await client.profile());rememberLockResult(checked);
+          if(lastReport?.lockResult?.at===previous.at)lastReport.lockResult={...checked};
+          status(checked.message,checked.status==='pending');
+        }));recheck.dataset.edit='';recheck.disabled=busy;lockResultBox.append(recheck);
+      }
     }
     function updateButtons(){scanButton.disabled=refreshButton.disabled=busy || !api.connected();sampleButton.disabled=busy;accountSelect.disabled=busy;exportLast.disabled=busy || !lastReport;body.querySelectorAll('[data-apply]').forEach(b=>b.disabled=busy || demo || b.dataset.empty==='true');body.querySelectorAll('select, [data-edit], .scan-fields input').forEach(b=>b.disabled=busy || b.dataset.unavailable==='true');connActions.querySelectorAll('button').forEach(b=>b.disabled=busy);}
     async function run(action){if(busy)return;busy=true;updateButtons();try{await action();}catch(e){status(e.message || 'The scan could not finish.',true);}finally{busy=false;showLockResult();updateButtons();}}
@@ -262,10 +273,9 @@
           let lockVerified=false;
           try{
             const completed=await core.executeLocks(plan,client,current,(done,step)=>{
-              const action=step?.phase==='verify-final'?'Checking the final lock states':step?.phase==='group-skipped'?'Leaving '+step.name+' for review and continuing':step?.phase==='verify-inventory'?'Checking fresh inventory for '+step.name:step?.phase==='verify-keeper'?'Verifying keeper: '+step.name:(step?.phase==='unlock'?'Unlocking: ':'Locking: ')+(step?.name || 'selected copies');
+              const action=step?.phase==='verify-final'?'Checking the batch lock states':step?.phase==='waiting-inventory'?'Waiting for updated inventory; '+step.pending+' states pending':step?.phase==='keeper-pending'?'Waiting to confirm '+step.name+' before unlocking duplicates':step?.phase==='verify-keeper'?'Verifying keeper: '+step.name:(step?.phase==='unlock'?'Unlocking: ':'Locking: ')+(step?.name || 'selected copies');
               status(done.length+' of '+changes+' change requests accepted. '+action+(step?.retrying?' (waiting for Bungie to update)':'')+'…');
-              if(step?.skippedGroups)outcome.skippedGroups=step.skippedGroups;
-              if(step?.accepted || step?.skippedGroups)rememberLockResult({...outcome,accepted:done.length});
+              if(step?.accepted)rememberLockResult({...outcome,accepted:done.length,completed:[...done]});
             });
             lockVerified=true;Object.assign(outcome,{status:'verified',accepted:completed.length,locked:completed.filter(c=>c.state).length,unlocked:completed.filter(c=>!c.state).length,completed});
             lastReport.lockResult={...outcome};rememberLockResult({...outcome});
@@ -275,13 +285,13 @@
           catch(error){
             if(error.partial){
               const verified=error.verifiedChanges || [];
-              Object.assign(outcome,{status:'partial',message:error.message,accepted:error.completed.length,completed:error.completed,skippedGroups:error.skippedGroups,
-                locked:verified.filter(c=>c.state).length,unlocked:verified.filter(c=>!c.state).length,verifiedChanges:verified,unconfirmed:error.unconfirmed || []});
+              Object.assign(outcome,{status:error.pendingVerification?'pending':'partial',pendingVerification:!!error.pendingVerification,message:error.message,accepted:error.completed.length,completed:error.completed,skippedGroups:error.skippedGroups,
+                locked:verified.filter(c=>c.state).length,unlocked:verified.filter(c=>!c.state).length,verifiedChanges:verified,unconfirmed:error.unconfirmed || [],expected:error.expected,verificationReads:error.verificationReads});
               try{await saveScan(false);outcome.checklistSaved=true;}catch(saveError){outcome.message+=' Checklist save failed: '+saveError.message;}
               lastReport.lockResult={...outcome};rememberLockResult({...outcome});status(outcome.message,true);return;
             }
             const failure=lockVerified?{...outcome,message:'Game locks were verified, but saving the checklist failed: '+error.message}:
-              {...outcome,status:'failed',message:error.message,accepted:error.completed?.length || 0,completed:error.completed || [],failure:error.lockFailure,unconfirmed:error.unconfirmed || [],skippedGroups:error.skippedGroups || []};
+              {...outcome,status:'failed',message:error.message,accepted:error.completed?.length || 0,completed:error.completed || [],failure:error.lockFailure,unconfirmed:error.unconfirmed || [],skippedGroups:error.skippedGroups || [],expected:error.expected,verificationReads:error.verificationReads};
             lastReport.lockResult=failure;rememberLockResult(failure);if(lockVerified)error.message=failure.message;throw error;
           }
           finally{result=null;report.replaceChildren();}
