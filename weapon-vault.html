@@ -223,11 +223,20 @@
     align-items:center;
     gap:9px;
     width:100%;
-    padding:2px 2px;
+    padding:4px 2px;
+    border-radius:var(--radius-sm);
     background:none;
     border:none;
     cursor:pointer;
     text-align:left;
+  }
+  .header-slim:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+  .header-options-label{
+    color:var(--accent);
+    font-family:"Work Sans",sans-serif;
+    font-size:13px;
+    font-weight:600;
+    white-space:nowrap;
   }
   .header-slim-dot{
     width:7px;height:7px;border-radius:50%;
@@ -259,7 +268,11 @@
   }
   .header-slim.collapsed .header-slim-chevron{transform:rotate(-90deg);}
   .header-full{
-    margin-top:8px;
+    margin-top:12px;
+    max-height:min(45vh, 380px);
+    overflow-y:auto;
+    scrollbar-gutter:stable;
+    padding:2px 2px 4px;
   }
   .header-full.collapsed{display:none;}
   .controls{
@@ -270,6 +283,7 @@
   }
   .search-wrap{
     position:relative;
+    margin-top:10px;
   }
   .search-wrap input{
     width:100%;
@@ -759,6 +773,8 @@
   @media (max-width:480px){
     h1{font-size:25px;}
     header.top{padding:13px 14px 10px;}
+    .header-slim-progress{display:none;}
+    .header-options-label{margin-left:auto;}
     main{padding:12px 14px 50px;}
   }
 </style>
@@ -766,14 +782,21 @@
 
 <header class="top">
   <div class="top-inner">
-    <button type="button" class="header-slim" id="headerToggle">
+    <button type="button" class="header-slim collapsed" id="headerToggle" aria-expanded="false" aria-controls="headerFull" aria-label="Show weapon vault options">
       <span class="header-slim-dot" id="syncDotMini"></span>
       <span class="header-slim-title">Weapon Vault</span>
       <span class="header-slim-progress"><b id="ownedCountMini">0</b>/<span id="totalCountMini">0</span></span>
-      <svg class="header-slim-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+      <span class="header-options-label" id="headerOptionsLabel">Show options</span>
+      <svg aria-hidden="true" class="header-slim-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
     </button>
 
-    <div class="header-full" id="headerFull">
+    <div class="search-wrap">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="text" id="searchInput" aria-label="Search weapons" placeholder="Search by name, frame, or source&hellip;" autocomplete="off">
+      <button type="button" class="name-only-toggle" id="nameOnlyToggle" title="Search names only">Name only</button>
+    </div>
+
+    <div class="header-full collapsed" id="headerFull" hidden>
       <div class="title-row">
         <div>
           <div class="eyebrow">Destiny 2 &middot; God-Roll Checklist</div>
@@ -791,12 +814,6 @@
       </div>
 
       <div class="controls" id="controlsPanel">
-        <div class="search-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          <input type="text" id="searchInput" placeholder="Search by name, frame, or source&hellip;" autocomplete="off">
-          <button type="button" class="name-only-toggle" id="nameOnlyToggle" title="Search names only">Name only</button>
-        </div>
-
         <div class="chip-scroller" id="statusChips">
           <button class="chip active" data-status="all">All</button>
           <button class="chip" data-status="owned">Owned</button>
@@ -1530,11 +1547,15 @@ function buildElementChips(){
 function wireControls(){
   const headerToggle = document.getElementById('headerToggle');
   const headerFull = document.getElementById('headerFull');
-  let headerCollapsed = false;
-  try{ headerCollapsed = localStorage.getItem('weaponVaultHeaderCollapsed') === '1'; }catch(e){}
+  let headerCollapsed = true;
+  try{ headerCollapsed = localStorage.getItem('weaponVaultHeaderCollapsed') !== '0'; }catch(e){}
   const applyHeaderState = () => {
     headerToggle.classList.toggle('collapsed', headerCollapsed);
     headerFull.classList.toggle('collapsed', headerCollapsed);
+    headerFull.hidden = headerCollapsed;
+    headerToggle.setAttribute('aria-expanded', String(!headerCollapsed));
+    headerToggle.setAttribute('aria-label', (headerCollapsed ? 'Show' : 'Hide') + ' weapon vault options');
+    document.getElementById('headerOptionsLabel').textContent = headerCollapsed ? 'Show options' : 'Hide options';
   };
   applyHeaderState();
   headerToggle.addEventListener('click', () => {

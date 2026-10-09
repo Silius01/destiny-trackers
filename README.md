@@ -2,6 +2,10 @@
 
 Weapon and armor checklists at <https://silius01.github.io/destiny-trackers/>. Static HTML/CSS/JavaScript; no build step or application server.
 
+## Weapon Vault controls
+
+Search stays visible at the top while you scroll through weapons. Use **Show options** / **Hide options** to open or collapse filters, progress details, and Bungie scan tools. Options start collapsed on a first visit; your choice is remembered in this browser. On smaller screens the expanded options scroll within their panel, keeping search accessible.
+
 ## Bungie inventory scan
 
 Open **Bungie inventory scan** in either tracker. It reads the vault plus carried and equipped items on all characters in the selected Destiny account. Cross-save uses the active membership. Postmaster items are excluded.
